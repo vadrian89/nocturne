@@ -3,6 +3,8 @@ local _, ns = ...
 -- Collects the player's tracked quests (quest watches + world quest watches)
 -- and resolves them to world positions in the player's zone/instance.
 
+local IsInsideQuestBlob = C_Minimap and C_Minimap.IsInsideQuestBlob
+
 local provider = { name = "trackedQuests" }
 ns.providers[#ns.providers + 1] = provider
 
@@ -143,11 +145,16 @@ function provider:Scan(playerMapID, playerInstance)
     return results
 end
 
--- True while the player stands inside the quest's region. GetDistanceSqToQuest
--- measures the distance to the quest's objective area; verify in-game whether
--- it reaches 0 inside the area blob, otherwise tune `inRegionYards`.
+-- True while the player stands inside the quest's region. The quest blob
+-- (the yellow area on the map) is the real region boundary; quests without
+-- a blob fall back to a radius around the pin (GetDistanceSqToQuest
+-- measures to the pin, never to the area — verified in-game).
 function provider:IsInRegion(entry)
     if entry.isTransit then return false end
+    if IsInsideQuestBlob then
+        local inside = IsInsideQuestBlob(entry.questID)
+        if not ns.IsSecret(inside) and inside then return true end
+    end
     local distSq = C_QuestLog.GetDistanceSqToQuest(entry.questID)
     if not distSq or ns.IsSecret(distSq) then return false end
     local r = ns.db.inRegionYards

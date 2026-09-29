@@ -22,10 +22,6 @@ local CARDINALS = {
     [270] = "W",
     [315] = "NW",
 }
-local WINDS = {
-    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
-}
 
 -- Bearing/facing math lives in Math.lua (ns.FacingCW / ns.RelAngle) so it
 -- has a single implementation shared by the drum, markers and diagnostics.
@@ -99,8 +95,9 @@ function ns:ApplyLayout()
     ns.frame:ClearAllPoints()
     ns.frame:SetPoint(p[1] or "CENTER", UIParent, p[1] or "CENTER", p[2] or 0, p[3] or 0)
 
-    ns.heading:SetShown(db.showHeading)
+    ns.coords:SetShown(db.showHeading)
     ns:RebuildDrum()
+    ns:ApplyBanner()
 end
 
 local function UpdatePlayer()
@@ -109,9 +106,13 @@ local function UpdatePlayer()
     -- so both ends always share the same coordinate frame.
     local mapID = GetBestMapForUnit("player")
     p.mapID = mapID
+    p.mapX, p.mapY = nil, nil
     if mapID then
         local pos = GetPlayerMapPosition(mapID, "player")
         if pos then
+            if not ns.IsSecret(pos.x) and not ns.IsSecret(pos.y) then
+                p.mapX, p.mapY = pos:GetXY()
+            end
             local inst, wpos = GetWorldPosFromMapPos(mapID, pos)
             if inst and wpos and not ns.IsSecret(wpos.x) and not ns.IsSecret(wpos.y) then
                 p.x, p.y = wpos:GetXY()
@@ -168,9 +169,12 @@ local function OnUpdate(_, elapsed)
     ns.drum:SetPoint("CENTER", ns.clip, "CENTER", -facingCW * ns.pxPerRad, 0)
 
     if ns.db.showHeading then
-        local deg = math.deg(facingCW) % 360
-        local idx = math.floor(deg / 22.5 + 0.5) % 16 + 1
-        ns.heading:SetFormattedText("%s %.0f°", WINDS[idx], deg)
+        local p = ns.player
+        if p.mapX then
+            ns.coords:SetFormattedText("%.1f, %.1f", p.mapX * 100, p.mapY * 100)
+        else
+            ns.coords:SetText("")
+        end
     end
 
     if ns.scanDirty then
@@ -214,9 +218,9 @@ function ns:CreateCompassFrame()
     local drum = CreateFrame("Frame", nil, clip)
     ns.drum = drum
 
-    local heading = T.CreateFontString(f, 10, T.colors.accent, "OVERLAY")
-    heading:SetPoint("BOTTOM", f, "TOP", 0, 1)
-    ns.heading = heading
+    local coords = T.CreateFontString(f, 12, T.colors.accent, "OVERLAY", "OUTLINE")
+    coords:SetPoint("BOTTOM", f, "TOP", 0, 1)
+    ns.coords = coords
 
     f:SetScript("OnUpdate", OnUpdate)
 

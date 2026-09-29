@@ -28,9 +28,8 @@ function ns:InitOptions()
 
     AddCheckbox(cat, "enabled", "Enable compass", "Show or hide the navigation bar.")
     AddCheckbox(cat, "locked", "Lock position", "Prevent dragging the bar and make it click-through.")
-    AddCheckbox(cat, "showHeading", "Show heading", "Numeric heading above the bar, e.g. NNW 315.")
+    AddCheckbox(cat, "showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
     AddCheckbox(cat, "showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
-    AddCheckbox(cat, "bannerPulse", "Pulse area banner", "Slow-pulse the quest/area name while inside its region.")
     AddCheckbox(cat, "hideInInstances", "Hide in instances", "Dungeons, raids, battlegrounds and arenas.")
     AddCheckbox(cat, "hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
 
@@ -44,6 +43,8 @@ function ns:InitOptions()
     AddSlider(cat, "maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
     AddSlider(cat, "inRegionYards", "Area radius (yards)",
         "Distance to a quest objective that counts as 'inside' its region.", 10, 200, 5)
+    AddSlider(cat, "bannerSize", "Area title size",
+        "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
 
     Settings.RegisterAddOnCategory(cat)
 end

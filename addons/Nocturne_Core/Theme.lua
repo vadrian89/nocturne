@@ -39,10 +39,41 @@ function T.ApplyBackdrop(frame)
     frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 1)
 end
 
-function T.CreateFontString(parent, size, color, drawLayer)
+function T.CreateFontString(parent, size, color, drawLayer, flags)
     local fs = parent:CreateFontString(nil, drawLayer or "OVERLAY")
-    fs:SetFont(T.fonts.main, size or 12, "")
+    fs:SetFont(T.fonts.main, size or 12, flags or "")
     local c = color or T.colors.text
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     return fs
+end
+
+-- Frame glow for "something active" states (e.g. inside a quest region):
+-- a pulsing additive accent rect over the frame.
+function T.SetGlow(frame, shown)
+    local g = frame._noctGlow
+    if shown then
+        if not g then
+            g = CreateFrame("Frame", nil, frame)
+            g:SetPoint("TOPLEFT", -6, 6)
+            g:SetPoint("BOTTOMRIGHT", 6, -6)
+            local c = T.colors.accent
+            g.tex = g:CreateTexture(nil, "OVERLAY")
+            g.tex:SetAllPoints()
+            g.tex:SetColorTexture(c[1], c[2], c[3], 0.35)
+            g.tex:SetBlendMode("ADD")
+            local ag = g:CreateAnimationGroup()
+            ag:SetLooping("BOUNCE")
+            local a = ag:CreateAnimation("Alpha")
+            a:SetFromAlpha(0.35)
+            a:SetToAlpha(1)
+            a:SetDuration(0.7)
+            g.pulse = ag
+            frame._noctGlow = g
+        end
+        g:Show()
+        g.pulse:Play()
+    elseif g then
+        g.pulse:Stop()
+        g:Hide()
+    end
 end

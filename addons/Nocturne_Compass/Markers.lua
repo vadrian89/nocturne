@@ -5,6 +5,10 @@ local T = Nocturne.Theme
 
 local pool = {}
 local banner
+local glowOn = false
+
+local DIST_Y = -17 -- distance label offset from the bar's center
+local DIST_SIZE = 9
 
 local QC = Enum.QuestClassification
 
@@ -41,7 +45,7 @@ local function CreateMarker()
     -- Distance text lives on the main frame (not the clip) so it can hang
     -- below the strip line without being clipped.
     m.dist = ns.frame:CreateFontString(nil, "OVERLAY")
-    m.dist:SetFont(T.fonts.main, 9, "")
+    m.dist:SetFont(T.fonts.main, DIST_SIZE, "")
     m.dist:SetTextColor(unpack(T.colors.textDim))
     return m
 end
@@ -212,7 +216,7 @@ function ns:UpdateMarkers()
                 m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
                 m.dist:ClearAllPoints()
                 if not atEdge then
-                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
+                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, DIST_Y)
                     m.dist:Show()
                 end
             else
@@ -244,7 +248,7 @@ function ns:UpdateMarkers()
         local x = side * ns:EdgeHalfWidth(w / 2 + EDGE_PAD + off)
         m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
         if db.showDistance then
-            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
+            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, DIST_Y)
             m.dist:Show()
         end
     end
@@ -256,40 +260,42 @@ function ns:UpdateMarkers()
         end
     end
 
-    -- In-region banner: pulsing quest/zone name on the bar.
-    if bannerTitle and bannerTitle ~= "" then
+    -- In-region banner: steady quest/zone name below the bar + a glow on
+    -- the compass frame while inside.
+    local inRegion = bannerTitle ~= nil and bannerTitle ~= ""
+    if inRegion ~= glowOn then
+        glowOn = inRegion
+        T.SetGlow(ns.frame, inRegion)
+    end
+    if inRegion then
         if banner._title ~= bannerTitle then
             banner._title = bannerTitle
             banner:SetText(bannerTitle)
         end
         banner:Show()
-        if db.bannerPulse and not banner.pulse:IsPlaying() then
-            banner.pulse:Play()
-        elseif not db.bannerPulse then
-            banner.pulse:Stop()
-            banner:SetAlpha(1)
-        end
     else
         banner._title = nil
         banner:Hide()
-        banner.pulse:Stop()
     end
+end
+
+-- Sits below the bar, and below the distance labels when they're shown so
+-- the two never overlap.
+function ns:ApplyBanner()
+    if not banner then return end
+    local db = ns.db
+    local y = -db.height / 2 - 4
+    if db.showDistance then y = math.min(y, DIST_Y - DIST_SIZE) end
+    banner:SetFont(T.fonts.main, db.bannerSize, "OUTLINE")
+    banner:ClearAllPoints()
+    banner:SetPoint("TOP", ns.frame, "CENTER", 0, y)
 end
 
 function ns:InitMarkers()
     banner = ns.frame:CreateFontString(nil, "OVERLAY")
-    banner:SetFont(T.fonts.main, 12, "")
-    banner:SetTextColor(unpack(T.colors.accent))
-    banner:SetPoint("BOTTOM", ns.frame, "TOP", 0, 16)
+    banner:SetTextColor(1, 1, 1, 1)
     banner:Hide()
-
-    local ag = banner:CreateAnimationGroup()
-    ag:SetLooping("BOUNCE")
-    local a = ag:CreateAnimation("Alpha")
-    a:SetFromAlpha(1)
-    a:SetToAlpha(0.25)
-    a:SetDuration(1.0)
-    banner.pulse = ag
+    ns:ApplyBanner()
 end
 
 -- Rescan triggers: quest/zone/super-track changes. Marker positions and

@@ -13,7 +13,7 @@ ns.defaults = {
     maxScale        = 1.6,
     scaleRange      = 1200,
     inRegionYards   = 60,
-    bannerPulse     = true,
+    bannerSize      = 16,
     hideInInstances = true,
     hideInCombat    = false,
     opacity         = 1.0,
@@ -37,5 +37,6 @@ end
 -- get overwritten once the real saved data loads.
 function ns:InitDB()
     NocturneCompassDB = MergeDefaults(_G.NocturneCompassDB or {}, ns.defaults)
+    NocturneCompassDB.bannerPulse = nil
     ns.db = NocturneCompassDB
 end
