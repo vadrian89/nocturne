@@ -77,6 +77,25 @@
         "C_CraftingOrders",
         "C_DateAndTime",
         "C_PvP",
-        "GetMinimapZoneText"
+        "GetMinimapZoneText",
+        "GetTasksTable",
+        "GetTaskInfo",
+        "GetQuestProgressBarPercent",
+        "GetQuestLogSpecialItemInfo",
+        "C_ScenarioInfo",
+        "C_Scenario",
+        "C_ChallengeMode",
+        "GetWorldElapsedTime",
+        "GetWorldElapsedTimers",
+        "C_ContentTracking",
+        "GetAchievementInfo",
+        "GetAchievementNumCriteria",
+        "GetAchievementCriteriaInfo",
+        "C_TradeSkillUI",
+        "C_Item",
+        "C_CurrencyInfo",
+        "C_Container",
+        "RegisterStateDriver",
+        "bit"
     ]
 }
