@@ -1,0 +1,17 @@
+## Interface: 120001
+## Title: Nocturne: Tracker
+## Notes: Clean, configurable quest tracker that replaces the Blizzard objective tracker.
+## Author: Vadrian
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## SavedVariables: NocturneTrackerDB
+## Dependencies: Nocturne_Core
+## Category: User Interface
+## AddonCompartmentFunc: NocturneTracker_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: NocturneTracker_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: NocturneTracker_OnCompartmentLeave
+
+Init.lua
+DB.lua
+Tracker.lua
+Options.lua
