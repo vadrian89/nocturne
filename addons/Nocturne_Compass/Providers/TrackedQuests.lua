@@ -1,32 +1,17 @@
 local _, ns = ...
 
 -- Collects the player's tracked quests (quest watches + world quest watches)
--- and resolves them to world positions on the player's continent/instance.
+-- and resolves them to world positions in the player's zone/instance.
 
 local provider = { name = "trackedQuests" }
 ns.providers[#ns.providers + 1] = provider
 
 provider.results = {}
 
--- Zone-level maps are static, safe to cache forever.
-local continentZones = {}
-
-local function GetContinentZones(continentMapID)
-    local zones = continentZones[continentMapID]
-    if zones then return zones end
-
-    zones = {}
-    for _, info in ipairs(C_Map.GetMapChildrenInfo(continentMapID) or {}) do
-        if info.mapType == Enum.UIMapType.Zone or info.mapType == Enum.UIMapType.Dungeon then
-            zones[#zones + 1] = info.mapID
-        end
-    end
-    continentZones[continentMapID] = zones
-    return zones
-end
-
--- Maps worth scanning for quest POIs: the player's map, the map the client
--- uses for quest POIs, the parent continent and all of its zone maps.
+-- Maps worth scanning for quest POIs: only the zone the player is in.
+-- The walk up the map ancestry covers the player standing inside a
+-- cave/dungeon sub-map of the zone; quests anywhere else on the
+-- continent/world are intentionally ignored.
 local function GetCandidateMaps(playerMapID)
     local maps, seen = {}, {}
     local function add(id)
@@ -39,24 +24,15 @@ local function GetCandidateMaps(playerMapID)
     add(playerMapID)
     add(C_QuestLog.GetMapForQuestPOIs())
 
-    local continentID
+    -- Climb the ancestry only while maps are sub-zone (caves/micro maps)
+    -- and stop at the zone/dungeon level — never add continent/world maps.
     local info = C_Map.GetMapInfo(playerMapID)
     while info do
-        if info.mapType == Enum.UIMapType.Continent then
-            continentID = info.mapID
-            break
-        end
+        local mt = info.mapType
+        add(info.mapID)
+        if mt ~= Enum.UIMapType.Micro and mt ~= Enum.UIMapType.Orphan then break end
         if not info.parentMapID or info.parentMapID == 0 then break end
         info = C_Map.GetMapInfo(info.parentMapID)
-    end
-
-    if continentID then
-        -- Zone-level pins are more precise than the continent's coarse ones,
-        -- so the continent map is scanned last.
-        for _, zoneID in ipairs(GetContinentZones(continentID)) do
-            add(zoneID)
-        end
-        add(continentID)
     end
     return maps
 end
@@ -150,7 +126,7 @@ function provider:Scan(playerMapID, playerInstance)
 
     -- The super-tracked quest lives on another continent/instance: point the
     -- bar at the client's transit waypoint (if any) instead.
-    if superWP and not superPlaced then
+    if superWP and superID and not superPlaced then
         local wx, wy = superWP:GetXY()
         results[#results + 1] = {
             key = "quest:" .. superID,
