@@ -1,52 +1,31 @@
 local _, ns = ...
 
-local function OnSettingChanged()
-    ns:ApplyLayout()
-end
-
-local function AddCheckbox(cat, key, name, tooltip)
-    local default = ns.defaults[key]
-    local setting = Settings.RegisterAddOnSetting(
-        cat, "NocturneCompass_" .. key, key, ns.db, type(default), name, default)
-    setting:SetValueChangedCallback(OnSettingChanged)
-    Settings.CreateCheckbox(cat, setting, tooltip)
-end
-
-local function AddSlider(cat, key, name, tooltip, minValue, maxValue, step)
-    local default = ns.defaults[key]
-    local setting = Settings.RegisterAddOnSetting(
-        cat, "NocturneCompass_" .. key, key, ns.db, type(default), name, default)
-    setting:SetValueChangedCallback(OnSettingChanged)
-    local options = Settings.CreateSliderOptions(minValue, maxValue, step)
-    options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)
-    Settings.CreateSlider(cat, setting, options, tooltip)
-end
-
 function ns:InitOptions()
-    local cat = Settings.RegisterVerticalLayoutCategory("Nocturne: Compass")
-    ns.category = cat
+    local s = _G.Nocturne.NewSettings("Nocturne: Compass", "NocturneCompass_", ns.db, ns.defaults,
+        function() ns:ApplyLayout() end)
+    ns.category = s.category
 
-    AddCheckbox(cat, "enabled", "Enable compass", "Show or hide the navigation bar.")
-    AddCheckbox(cat, "locked", "Lock position", "Prevent dragging the bar and make it click-through.")
-    AddCheckbox(cat, "showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
-    AddCheckbox(cat, "showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
-    AddCheckbox(cat, "hideInInstances", "Hide in instances", "Dungeons, raids, battlegrounds and arenas.")
-    AddCheckbox(cat, "hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
+    s:Checkbox("enabled", "Enable compass", "Show or hide the navigation bar.")
+    s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
+    s:Checkbox("showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
+    s:Checkbox("showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
+    s:Checkbox("hideInInstances", "Hide in instances", "Dungeons, raids, battlegrounds and arenas.")
+    s:Checkbox("hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
 
-    AddSlider(cat, "width", "Bar width", "Length of the compass strip in pixels.", 200, 900, 10)
-    AddSlider(cat, "height", "Bar height", nil, 16, 64, 2)
-    AddSlider(cat, "fovDegrees", "Field of view", "Degrees of heading visible across the bar.", 60, 180, 5)
-    AddSlider(cat, "opacity", "Opacity", nil, 0.2, 1, 0.05)
-    AddSlider(cat, "scaleRange", "Scale range (yards)", "Distance at which markers reach their minimum size.", 300, 3000,
+    s:Slider("width", "Bar width", "Length of the compass strip in pixels.", 200, 900, 10)
+    s:Slider("height", "Bar height", nil, 16, 64, 2)
+    s:Slider("fovDegrees", "Field of view", "Degrees of heading visible across the bar.", 60, 180, 5)
+    s:Slider("opacity", "Opacity", nil, 0.2, 1, 0.05)
+    s:Slider("scaleRange", "Scale range (yards)", "Distance at which markers reach their minimum size.", 300, 3000,
         50)
-    AddSlider(cat, "minScale", "Marker min scale", "Size of far away markers.", 0.2, 1, 0.05)
-    AddSlider(cat, "maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
-    AddSlider(cat, "inRegionYards", "Area radius (yards)",
+    s:Slider("minScale", "Marker min scale", "Size of far away markers.", 0.2, 1, 0.05)
+    s:Slider("maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
+    s:Slider("inRegionYards", "Area radius (yards)",
         "Distance to a quest objective that counts as 'inside' its region.", 10, 200, 5)
-    AddSlider(cat, "bannerSize", "Area title size",
+    s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
 
-    Settings.RegisterAddOnCategory(cat)
+    s:Finish()
 end
 
 function ns:OpenOptions()

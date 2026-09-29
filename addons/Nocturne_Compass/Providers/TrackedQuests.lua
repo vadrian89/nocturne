@@ -6,39 +6,9 @@ local _, ns = ...
 local IsInsideQuestBlob = C_Minimap and C_Minimap.IsInsideQuestBlob
 local GetTime = GetTime
 
--- Marker icons per quest classification: available/in progress ("!") and
--- ready to turn in ("?"). Candidates are tried in order since atlas names
--- changed across expansions. Blizzard's QuestUtil icon pickers are avoided
--- on purpose: they fill Blizzard's QuestCache, which would spread taint.
-local QC = Enum.QuestClassification or {}
-local QUEST_ICONS = {}
-local function QuestIcons(class, offer, turnIn)
-    if class then QUEST_ICONS[class] = { offer = offer, turnIn = turnIn } end
-end
-QuestIcons(QC.Campaign, { "Quest-Campaign-Available", "CampaignAvailableQuestIcon" },
-    { "Quest-Campaign-TurnIn", "CampaignActiveQuestIcon" })
-QuestIcons(QC.Important, { "Quest-Important-Available", "importantavailablequesticon" },
-    { "Quest-Important-TurnIn", "importantactivequesticon" })
-QuestIcons(QC.Legendary, { "Quest-Legendary-Available", "legendaryavailablequesticon" },
-    { "Quest-Legendary-TurnIn", "legendaryactivequesticon" })
-QuestIcons(QC.Calling, { "Quest-DailyCampaign-Available", "CampaignAvailableDailyQuestIcon" },
-    { "Quest-DailyCampaign-TurnIn", "CampaignActiveDailyQuestIcon" })
-QuestIcons(QC.Meta, { "Quest-Meta-Available" }, { "Quest-Meta-TurnIn" })
-QuestIcons(QC.Recurring, { "Quest-Recurring-Available", "QuestDaily" },
-    { "Quest-Recurring-TurnIn", "QuestRepeatableTurnin" })
-local DAILY_ICONS = { offer = { "QuestDaily" }, turnIn = { "QuestRepeatableTurnin" } }
-local NORMAL_ICONS = { offer = {}, turnIn = {} }
-
 local function QuestAtlas(e, isDaily)
     if e.isTransit then return ns.TransitAtlas() end
-    if e.isWorldQuest and not e.isComplete then
-        return ns.FirstAtlas("worldquest-questicon-questionmark", "QuestNormal")
-    end
-    local icons = QUEST_ICONS[e.classification] or (isDaily and DAILY_ICONS) or NORMAL_ICONS
-    if e.isComplete then
-        return ns.FirstAtlas(unpack(icons.turnIn)) or ns.FirstAtlas("QuestTurnin", "QuestNormal")
-    end
-    return ns.FirstAtlas(unpack(icons.offer)) or ns.FirstAtlas("QuestNormal")
+    return _G.Nocturne.QuestAtlas(e.classification, e.isComplete, e.isWorldQuest, isDaily)
 end
 
 local provider = { name = "trackedQuests" }
