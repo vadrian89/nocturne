@@ -36,6 +36,13 @@ local function SavePosition()
     db.point[3] = cy - UIParent:GetHeight() / 2
 end
 
+-- Horizontally centered on the screen, keeping the current height.
+function ns:CenterHorizontally()
+    SavePosition()
+    ns.db.point[2] = 0
+    ns:ApplyLayout()
+end
+
 -- Rebuilds the letters/ticks inside the drum for the current width/FOV.
 function ns:RebuildDrum()
     local db = ns.db

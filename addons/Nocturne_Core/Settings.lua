@@ -46,6 +46,13 @@ function Builder:Dropdown(key, name, tooltip, labels)
     CreateDD(self.category, self:Register(key, name), GetOptions, tooltip)
 end
 
+-- A plain action button, not bound to any setting.
+function Builder:Button(name, buttonText, onClick, tooltip)
+    if not (CreateSettingsButtonInitializer and SettingsPanel) then return end
+    SettingsPanel:GetLayout(self.category):AddInitializer(
+        CreateSettingsButtonInitializer(name, buttonText, onClick, tooltip, true))
+end
+
 function Builder:Finish()
     Settings.RegisterAddOnCategory(self.category)
     return self.category

@@ -10,6 +10,8 @@ function ns:InitOptions()
         "to the bar, with mail, calendar invite and crafting order indicators.",
         { "Compass (hide minimap)", "Minimap (hide compass)", "Compass and minimap" })
     s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
+    s:Button("Horizontal position", "Center", function() ns:CenterHorizontally() end,
+        "Center the bar horizontally on the screen, keeping its height.")
     s:Checkbox("showZone", "Show zone name", "Current zone above the bar, colored like the minimap's zone text.")
     s:Checkbox("showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
     s:Checkbox("showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
@@ -89,6 +91,34 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
             tostring(ST.GetSuperTrackedQuestID()), tostring(pinType), tostring(pinID),
             tostring(ST.GetSuperTrackedVignette and ST.GetSuperTrackedVignette()),
             tostring(ST.IsSuperTrackingUserWaypoint()), tostring(wx), tostring(wy), tostring(tx), tostring(ty))
+
+        -- Raw inputs the client may restrict inside instances (nil or secret).
+        local function S(v) return ns.IsSecret(v) and "<secret>" or tostring(v) end
+        local instName, instType, difficultyID = GetInstanceInfo()
+        local rawPos = p.mapID and C_Map.GetPlayerMapPosition(p.mapID, "player")
+        local ux, uy = UnitPosition("player")
+        lines[#lines + 1] = ("instance='%s' type=%s difficulty=%s rawFacing=%s rawMapPos=%s,%s unitPos=%s,%s"):format(
+            S(instName), S(instType), S(difficultyID), S(GetPlayerFacing()),
+            S(rawPos and rawPos.x), S(rawPos and rawPos.y), S(ux), S(uy))
+        local N = C_Navigation
+        if N then
+            local nav = N.GetFrame and N.GetFrame()
+            local nx, ny
+            if nav then nx, ny = nav:GetCenter() end
+            lines[#lines + 1] = ("navigation state=%s dist=%s validScreen=%s clamped=%s frame=%s,%s screen=%.0fx%.0f"):format(
+                S(N.GetTargetState and N.GetTargetState()), S(N.GetDistance and N.GetDistance()),
+                S(N.HasValidScreenPosition and N.HasValidScreenPosition()),
+                S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
+                UIParent:GetWidth(), UIParent:GetHeight())
+        end
+        local selected = ns.GetSelectedQuestID()
+        local onMap = p.mapID and C_QuestLog.GetQuestsOnMap(p.mapID)
+        local objectives = selected and C_QuestLog.GetQuestObjectives(selected)
+        lines[#lines + 1] = ("questsOnMap=%d selected=%s objectives=%d"):format(
+            onMap and #onMap or -1, tostring(selected), objectives and #objectives or -1)
+        for _, o in ipairs(objectives or {}) do
+            lines[#lines + 1] = ("  objective '%s' done=%s"):format(S(o.text), S(o.finished))
+        end
         for _, e in ipairs(ns.scanResults) do
             local dx, dy = e.x - (p.x or 0), e.y - (p.y or 0)
             local dist = ns.math.Distance(dx, dy)
