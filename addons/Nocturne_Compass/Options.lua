@@ -10,6 +10,9 @@ function ns:InitOptions()
         "to the bar, with mail, calendar invite and crafting order indicators.",
         { "Compass (hide minimap)", "Minimap (hide compass)", "Compass and minimap" })
     s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
+    s:Checkbox("anchorTop", "Anchor to top of screen",
+        "Pin the bar to the top edge, leaving room for the clock, zone name and coordinates above it. " ..
+        "It can still be dragged sideways.")
     s:Button("Horizontal position", "Center", function() ns:CenterHorizontally() end,
         "Center the bar horizontally on the screen, keeping its height.")
     s:Checkbox("showZone", "Show zone name", "Current zone above the bar, colored like the minimap's zone text.")
@@ -89,7 +92,8 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
         if ST.GetSuperTrackedMapPin then pinType, pinID = ST.GetSuperTrackedMapPin() end
         local wx, wy = ST.GetNextWaypointForMap(p.mapID or 0)
         local tx, ty = ns.TransitWaypoint(p.mapID, p.instance)
-        lines[#lines + 1] = ("superTrack type=%s quest=%s mapPin=%s:%s vignette=%s userWP=%s transit=%s,%s world=%s,%s"):format(
+        lines[#lines + 1] = ("superTrack type=%s quest=%s mapPin=%s:%s vignette=%s userWP=%s transit=%s,%s world=%s,%s")
+        :format(
             tostring(ST.GetHighestPrioritySuperTrackingType and ST.GetHighestPrioritySuperTrackingType()),
             tostring(ST.GetSuperTrackedQuestID()), tostring(pinType), tostring(pinID),
             tostring(ST.GetSuperTrackedVignette and ST.GetSuperTrackedVignette()),
@@ -108,7 +112,8 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
             local nav = N.GetFrame and N.GetFrame()
             local nx, ny
             if nav then nx, ny = nav:GetCenter() end
-            lines[#lines + 1] = ("navigation state=%s dist=%s validScreen=%s clamped=%s frame=%s,%s screen=%.0fx%.0f"):format(
+            lines[#lines + 1] = ("navigation state=%s dist=%s validScreen=%s clamped=%s frame=%s,%s screen=%.0fx%.0f")
+            :format(
                 S(N.GetTargetState and N.GetTargetState()), S(N.GetDistance and N.GetDistance()),
                 S(N.HasValidScreenPosition and N.HasValidScreenPosition()),
                 S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),

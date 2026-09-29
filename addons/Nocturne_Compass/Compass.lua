@@ -25,6 +25,8 @@ local CARDINALS = {
 -- Bearing/facing math lives in Math.lua (ns.FacingCW / ns.RelAngle) so it
 -- has a single implementation shared by the drum, markers and diagnostics.
 
+local TOP_MARGIN = 4
+
 local letters = {}
 local ticks = {}
 
@@ -33,7 +35,7 @@ local function SavePosition()
     local cx, cy = ns.frame:GetCenter()
     db.point[1] = "CENTER"
     db.point[2] = cx - UIParent:GetWidth() / 2
-    db.point[3] = cy - UIParent:GetHeight() / 2
+    if not db.anchorTop then db.point[3] = cy - UIParent:GetHeight() / 2 end
 end
 
 -- Horizontally centered on the screen, keeping the current height.
@@ -97,14 +99,21 @@ function ns:ApplyLayout()
     ns.frame:SetAlpha(db.opacity)
     ns.frame:EnableMouse(not db.locked)
 
-    local p = db.point
-    ns.frame:ClearAllPoints()
-    ns.frame:SetPoint(p[1] or "CENTER", UIParent, p[1] or "CENTER", p[2] or 0, p[3] or 0)
-
     -- Top row: clock, zone name (centered), coordinates; lifted clear of the
     -- selected marker's pop-out. Without a zone name, clock and coordinates
     -- flank the center (or sit centered alone).
     local top = math.max(1, (ns:SelectedPopHeight() - db.height) / 2 + 1)
+
+    -- Anchored to the screen top, the bar is lowered by what sits above it
+    -- (top row text / marker pop-out) so none of it is cut off.
+    local p = db.point
+    ns.frame:ClearAllPoints()
+    if db.anchorTop then
+        local textH = (db.showZone or db.showClock or db.showHeading) and db.zoneSize + 2 or 0
+        ns.frame:SetPoint("TOP", UIParent, "TOP", p[2] or 0, -(top + textH + TOP_MARGIN))
+    else
+        ns.frame:SetPoint(p[1] or "CENTER", UIParent, p[1] or "CENTER", p[2] or 0, p[3] or 0)
+    end
     for _, fs in ipairs({ ns.clock, ns.zone, ns.coords }) do
         fs:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
         fs:ClearAllPoints()
@@ -265,6 +274,7 @@ function ns:CreateCompassFrame()
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         SavePosition()
+        if ns.db.anchorTop then ns:ApplyLayout() end
     end)
 
     local clip = CreateFrame("Frame", nil, f)
