@@ -101,21 +101,28 @@ function ns:ApplyLayout()
     ns.frame:ClearAllPoints()
     ns.frame:SetPoint(p[1] or "CENTER", UIParent, p[1] or "CENTER", p[2] or 0, p[3] or 0)
 
-    -- Zone name centered above the bar, coordinates right beside it (or
-    -- centered on their own); lifted clear of the selected marker's pop-out.
+    -- Top row: clock, zone name (centered), coordinates; lifted clear of the
+    -- selected marker's pop-out. Without a zone name, clock and coordinates
+    -- flank the center (or sit centered alone).
     local top = math.max(1, (ns:SelectedPopHeight() - db.height) / 2 + 1)
-    ns.zone:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
-    ns.coords:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
-    ns.zone:ClearAllPoints()
+    for _, fs in ipairs({ ns.clock, ns.zone, ns.coords }) do
+        fs:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
+        fs:ClearAllPoints()
+    end
     ns.zone:SetPoint("BOTTOM", ns.frame, "TOP", 0, top)
-    ns.zone:SetShown(db.showZone)
-    ns.coords:ClearAllPoints()
     if db.showZone then
+        ns.clock:SetPoint("RIGHT", ns.zone, "LEFT", -8, 0)
         ns.coords:SetPoint("LEFT", ns.zone, "RIGHT", 8, 0)
+    elseif db.showClock and db.showHeading then
+        ns.clock:SetPoint("BOTTOMRIGHT", ns.frame, "TOP", -4, top)
+        ns.coords:SetPoint("BOTTOMLEFT", ns.frame, "TOP", 4, top)
     else
+        ns.clock:SetPoint("BOTTOM", ns.frame, "TOP", 0, top)
         ns.coords:SetPoint("BOTTOM", ns.frame, "TOP", 0, top)
     end
+    ns.zone:SetShown(db.showZone)
     ns.coords:SetShown(db.showHeading)
+    ns:ApplyClock()
     ns:RebuildDrum()
     ns:ApplyBanner()
     ns:ApplyMinimap()
@@ -196,6 +203,7 @@ local function SetBarVisible(visible)
     if visible ~= ns.barVisible then
         ns.barVisible = visible
         ns:ApplyMinimap()
+        ns:ApplyClock()
     end
 end
 
@@ -278,6 +286,7 @@ function ns:CreateCompassFrame()
 
     ns.zone = T.CreateFontString(f, 12, nil, "OVERLAY", "OUTLINE")
     ns.coords = T.CreateFontString(f, 12, T.colors.accent, "OVERLAY", "OUTLINE")
+    ns:InitClock()
     ns:InitMinimapButtons()
 
     f:SetScript("OnUpdate", OnUpdate)

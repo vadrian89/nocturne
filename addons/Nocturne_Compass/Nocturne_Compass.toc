@@ -16,6 +16,7 @@ DB.lua
 Math.lua
 Providers\TrackedQuests.lua
 Providers\MapPins.lua
+Clock.lua
 Minimap.lua
 Compass.lua
 Markers.lua

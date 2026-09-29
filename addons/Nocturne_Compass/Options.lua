@@ -13,6 +13,9 @@ function ns:InitOptions()
     s:Button("Horizontal position", "Center", function() ns:CenterHorizontally() end,
         "Center the bar horizontally on the screen, keeping its height.")
     s:Checkbox("showZone", "Show zone name", "Current zone above the bar, colored like the minimap's zone text.")
+    s:Checkbox("showClock", "Show clock",
+        "Time left of the zone name. Click it for Blizzard's time options (local/realm time, 24h, " ..
+        "alarm); right-click for the stopwatch.")
     s:Checkbox("showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
     s:Checkbox("showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
     s:Checkbox("hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
@@ -27,7 +30,7 @@ function ns:InitOptions()
     s:Slider("maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
     s:Slider("inRegionYards", "Area radius (yards)",
         "Distance to a quest objective that counts as 'inside' its region.", 10, 200, 5)
-    s:Slider("zoneSize", "Zone text size", "Font size of the zone name and coordinates above the bar.", 8, 24, 1)
+    s:Slider("zoneSize", "Zone text size", "Font size of the clock, zone name and coordinates above the bar.", 8, 24, 1)
     s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
 

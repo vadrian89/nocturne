@@ -15,6 +15,7 @@ ns.defaults = {
     fovDegrees      = 120,
     showHeading     = true,
     showZone        = true,
+    showClock       = true,
     zoneSize        = 12,
     showDistance    = true,
     minScale        = 0.5,
