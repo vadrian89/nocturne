@@ -17,6 +17,9 @@ function Nocturne.Debug(...)
     end
 end
 
+-- Midnight (12.0): some values may be "secret" on tainted paths.
+Nocturne.IsSecret = _G.issecretvalue or function() return false end
+
 function Nocturne.RegisterModule(name, module)
     Nocturne.modules[name] = module
     return module

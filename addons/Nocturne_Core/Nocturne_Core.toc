@@ -11,3 +11,5 @@
 Init.lua
 Theme.lua
 UI.lua
+Settings.lua
+Quest.lua
