@@ -1,0 +1,29 @@
+---@meta
+
+---Blizzard globals the addons read through `_G.<name>` (LuaLS treats those as
+---fields of `_G`, which `diagnostics.globals` does not cover).
+---@class _G
+---@field ExpansionLandingPageMinimapButton table
+---@field AddonCompartmentFrame table
+---@field ToggleCalendar fun()
+---@field LibStub fun(name: string, silent?: boolean): table?
+---@field IsAddOnLoaded fun(name: string): boolean
+---@field NamePlateDriverFrame table
+---@field PlayerFrame table
+---@field TargetFrame table
+---@field GeneralDockManager table
+---@field ChatFrameMenuButton table
+---@field ChatFrameChannelButton table
+---@field QuickJoinToastButton table
+---@field ObjectiveTrackerFrame table
+---@field QuestMapFrame_OpenToQuestDetails fun(questID: number)
+---@field OpenAchievementFrameToAchievement fun(achievementID: number)
+---@field TRACKER_HEADER_WORLD_QUESTS string
+---@field TRACKER_HEADER_BONUS_OBJECTIVES string
+---@field TRACKER_HEADER_ACHIEVEMENTS string
+---@field TIMEMANAGER_TOOLTIP_TITLE string
+---@field TIMEMANAGER_TOOLTIP_REALMTIME string
+---@field TIMEMANAGER_TOOLTIP_LOCALTIME string
+---@field ConsolePortBarCluster table
+---@field ConsolePortBarManager table
+---@field ConsolePortCluster table

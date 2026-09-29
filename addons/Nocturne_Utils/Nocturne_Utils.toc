@@ -1,0 +1,17 @@
+## Interface: 120001
+## Title: Nocturne: Utils
+## Notes: UI decluttering: hide unit frames, bag bar, chat in combat, ConsolePort cluster.
+## Author: Vadrian
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Misc_Wrench_01
+## SavedVariables: NocturneUtilsDB
+## Dependencies: Nocturne_Core
+## Category: User Interface
+## AddonCompartmentFunc: NocturneUtils_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: NocturneUtils_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: NocturneUtils_OnCompartmentLeave
+
+Init.lua
+DB.lua
+Frames.lua
+Options.lua
