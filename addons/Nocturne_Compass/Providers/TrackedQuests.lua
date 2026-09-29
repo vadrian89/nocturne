@@ -4,6 +4,42 @@ local _, ns = ...
 -- and resolves them to world positions in the player's zone/instance.
 
 local IsInsideQuestBlob = C_Minimap and C_Minimap.IsInsideQuestBlob
+local GetTime = GetTime
+
+-- Marker icons per quest classification: available/in progress ("!") and
+-- ready to turn in ("?"). Candidates are tried in order since atlas names
+-- changed across expansions. Blizzard's QuestUtil icon pickers are avoided
+-- on purpose: they fill Blizzard's QuestCache, which would spread taint.
+local QC = Enum.QuestClassification or {}
+local QUEST_ICONS = {}
+local function QuestIcons(class, offer, turnIn)
+    if class then QUEST_ICONS[class] = { offer = offer, turnIn = turnIn } end
+end
+QuestIcons(QC.Campaign, { "Quest-Campaign-Available", "CampaignAvailableQuestIcon" },
+    { "Quest-Campaign-TurnIn", "CampaignActiveQuestIcon" })
+QuestIcons(QC.Important, { "Quest-Important-Available", "importantavailablequesticon" },
+    { "Quest-Important-TurnIn", "importantactivequesticon" })
+QuestIcons(QC.Legendary, { "Quest-Legendary-Available", "legendaryavailablequesticon" },
+    { "Quest-Legendary-TurnIn", "legendaryactivequesticon" })
+QuestIcons(QC.Calling, { "Quest-DailyCampaign-Available", "CampaignAvailableDailyQuestIcon" },
+    { "Quest-DailyCampaign-TurnIn", "CampaignActiveDailyQuestIcon" })
+QuestIcons(QC.Meta, { "Quest-Meta-Available" }, { "Quest-Meta-TurnIn" })
+QuestIcons(QC.Recurring, { "Quest-Recurring-Available", "QuestDaily" },
+    { "Quest-Recurring-TurnIn", "QuestRepeatableTurnin" })
+local DAILY_ICONS = { offer = { "QuestDaily" }, turnIn = { "QuestRepeatableTurnin" } }
+local NORMAL_ICONS = { offer = {}, turnIn = {} }
+
+local function QuestAtlas(e, isDaily)
+    if e.isTransit then return ns.TransitAtlas() end
+    if e.isWorldQuest and not e.isComplete then
+        return ns.FirstAtlas("worldquest-questicon-questionmark", "QuestNormal")
+    end
+    local icons = QUEST_ICONS[e.classification] or (isDaily and DAILY_ICONS) or NORMAL_ICONS
+    if e.isComplete then
+        return ns.FirstAtlas(unpack(icons.turnIn)) or ns.FirstAtlas("QuestTurnin", "QuestNormal")
+    end
+    return ns.FirstAtlas(unpack(icons.offer)) or ns.FirstAtlas("QuestNormal")
+end
 
 local provider = { name = "trackedQuests" }
 ns.providers[#ns.providers + 1] = provider
@@ -56,90 +92,131 @@ local function GetWatchedQuests(watched, order)
     end
 end
 
+-- Record every still-unfound quest of `watched` listed on `mapID`.
+local function MatchPOIs(mapID, pois, watched)
+    local n = 0
+    for _, info in ipairs(pois or {}) do
+        local w = watched[info.questID]
+        if w and not w.found and info.x then
+            w.found = { mapID = mapID, x = info.x, y = info.y, name = info.questName, isDaily = info.isDaily }
+            n = n + 1
+        end
+    end
+    return n
+end
+
+-- Quest offers (not yet accepted quests shown on the map) load on demand:
+-- request an empty map at most once a minute (the client may drop the data
+-- again); QUESTLINE_UPDATE then triggers a rescan.
+local OFFER_REQUEST_INTERVAL = 60
+local requestedOffers = {}
+local function QuestOffersOnMap(mapID)
+    if not C_QuestLine then return nil end
+    local offers = C_QuestLine.GetAvailableQuestLines(mapID)
+    if (not offers or #offers == 0) and C_QuestLine.RequestQuestLinesForMap then
+        local now = GetTime()
+        if now - (requestedOffers[mapID] or -OFFER_REQUEST_INTERVAL) >= OFFER_REQUEST_INTERVAL then
+            requestedOffers[mapID] = now
+            C_QuestLine.RequestQuestLinesForMap(mapID)
+        end
+    end
+    return offers
+end
+
+local function MatchMap(mapID, watched)
+    if not mapID or mapID == 0 then return 0 end
+    return MatchPOIs(mapID, C_QuestLog.GetQuestsOnMap(mapID), watched)
+        + MatchPOIs(mapID, C_TaskQuest.GetQuestsOnMap(mapID), watched)
+        + MatchPOIs(mapID, QuestOffersOnMap(mapID), watched)
+end
+
+-- Map the selected quest was last found on, so rescans skip the search;
+-- and the search epoch in which a continent-wide search last missed.
+local superMapCache = {}
+local missedAt = {}
+
+-- The selected quest anywhere on the player's continent: the map it was
+-- last found on, its own quest map, then every zone of the continent (the
+-- latter at most once per search epoch).
+local function FindOnContinent(qid, w, playerMapID)
+    local only = { [qid] = w }
+    local own
+    if w.kind == "worldquest" then
+        own = C_TaskQuest.GetQuestZoneID and C_TaskQuest.GetQuestZoneID(qid)
+    elseif GetQuestUiMapID then
+        own = GetQuestUiMapID(qid)
+    end
+    if MatchMap(superMapCache[qid], only) == 0 and MatchMap(own, only) == 0
+        and missedAt[qid] ~= ns.searchEpoch then
+        for _, child in ipairs(ns.ContinentZones(playerMapID)) do
+            if MatchMap(child.mapID, only) > 0 then break end
+        end
+    end
+    if w.found then
+        superMapCache[qid], missedAt[qid] = w.found.mapID, nil
+    else
+        missedAt[qid] = ns.searchEpoch
+    end
+end
+
+-- Tracked quests are limited to the player's zone; the selected
+-- (super-tracked) quest, watched or not, is shown anywhere on the continent.
 function provider:Scan(playerMapID, playerInstance)
     local results = wipe(self.results)
     if not playerMapID or not playerInstance then return results end
 
     local watched, order = {}, {}
     GetWatchedQuests(watched, order)
+
+    local superID = ns.GetSelectedQuestID()
+    if superID and not watched[superID] then
+        watched[superID] = { kind = C_QuestLog.IsWorldQuest(superID) and "worldquest" or "quest" }
+        order[#order + 1] = superID
+    end
     if #order == 0 then return results end
 
     local remaining = #order
     for _, mapID in ipairs(GetCandidateMaps(playerMapID)) do
         if remaining == 0 then break end
-        for _, info in ipairs(C_QuestLog.GetQuestsOnMap(mapID) or {}) do
-            local w = watched[info.questID]
-            if w and not w.found and info.x then
-                w.found = { mapID = mapID, x = info.x, y = info.y }
-                remaining = remaining - 1
-            end
-        end
-        for _, info in ipairs(C_TaskQuest.GetQuestsOnMap(mapID) or {}) do
-            local w = watched[info.questID]
-            if w and not w.found and info.x then
-                w.found = { mapID = mapID, x = info.x, y = info.y }
-                remaining = remaining - 1
-            end
-        end
+        remaining = remaining - MatchMap(mapID, watched)
     end
 
-    -- Blizzard's own navigation waypoint for the super-tracked quest: for a
-    -- same-map quest this is the objective area the client navigates to
-    -- (better centered than the map pin); cross-continent it is a transit
-    -- waypoint on the player's map.
-    local superID = C_SuperTrack.GetSuperTrackedQuestID()
-    local superWP, superPlaced
-    if superID and superID > 0 then
-        local tx, ty = C_SuperTrack.GetNextWaypointForMap(playerMapID)
-        if tx and ty then
-            local inst, wpos = C_Map.GetWorldPosFromMapPos(playerMapID, CreateVector2D(tx, ty))
-            if inst and wpos and inst == playerInstance and
-                not ns.IsSecret(wpos.x) and not ns.IsSecret(wpos.y) then
-                superWP = wpos
-            end
+    -- A route that leaves the map (portal, boat, zone exit): the bar points
+    -- at the transit waypoint with the transit arrow instead of the quest.
+    local transitX, transitY
+    if superID then
+        transitX, transitY = ns.TransitWaypoint(playerMapID, playerInstance)
+        if not transitX and not watched[superID].found then
+            FindOnContinent(superID, watched[superID], playerMapID)
         end
     end
 
     for _, qid in ipairs(order) do
-        local f = watched[qid].found
-        if f then
-            local inst, wpos = C_Map.GetWorldPosFromMapPos(f.mapID, CreateVector2D(f.x, f.y))
-            if inst and wpos and inst == playerInstance then
-                local wx, wy = wpos:GetXY()
-                if qid == superID then
-                    superPlaced = true
-                    if superWP then wx, wy = superWP:GetXY() end
-                end
-                results[#results + 1] = {
-                    key = "quest:" .. qid,
-                    provider = self,
-                    questID = qid,
-                    title = C_QuestLog.GetTitleForQuestID(qid) or "Quest",
-                    x = wx,
-                    y = wy,
-                    isComplete = C_QuestLog.IsComplete(qid) or false,
-                    classification = C_QuestInfoSystem.GetQuestClassification(qid),
-                    isSuperTracked = (qid == superID),
-                    isWorldQuest = (watched[qid].kind == "worldquest"),
-                }
-            end
+        local w = watched[qid]
+        local isTransit = qid == superID and transitX ~= nil
+        local wx, wy
+        if isTransit then
+            wx, wy = transitX, transitY
+        elseif w.found then
+            wx, wy = ns.MapToWorld(w.found.mapID, w.found.x, w.found.y, playerInstance)
         end
-    end
-
-    -- The super-tracked quest lives on another continent/instance: point the
-    -- bar at the client's transit waypoint (if any) instead.
-    if superWP and superID and not superPlaced then
-        local wx, wy = superWP:GetXY()
-        results[#results + 1] = {
-            key = "quest:" .. superID,
-            provider = self,
-            questID = superID,
-            title = (C_QuestLog.GetTitleForQuestID(superID) or "Quest"),
-            x = wx,
-            y = wy,
-            isTransit = true,
-            isSuperTracked = true,
-        }
+        if wx then
+            local e = {
+                key = "quest:" .. qid,
+                provider = self,
+                questID = qid,
+                title = C_QuestLog.GetTitleForQuestID(qid) or (w.found and w.found.name) or "Quest",
+                x = wx,
+                y = wy,
+                isTransit = isTransit,
+                isComplete = C_QuestLog.IsComplete(qid) or false,
+                classification = C_QuestInfoSystem.GetQuestClassification(qid),
+                isSuperTracked = (qid == superID),
+                isWorldQuest = (w.kind == "worldquest"),
+            }
+            e.atlas = QuestAtlas(e, w.found and w.found.isDaily)
+            results[#results + 1] = e
+        end
     end
 
     return results

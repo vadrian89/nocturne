@@ -94,6 +94,18 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                 p.x or 0, p.y or 0, tostring(p.instance), tostring(p.mapID), #ns.scanResults),
             ("pxPerRad=%.1f clipWidth=%.1f"):format(pxPerRad, clipW),
         }
+        -- What the client is navigating to (the gold diamond), whether or
+        -- not a provider resolved it into a marker.
+        local ST = C_SuperTrack
+        local pinType, pinID
+        if ST.GetSuperTrackedMapPin then pinType, pinID = ST.GetSuperTrackedMapPin() end
+        local wx, wy = ST.GetNextWaypointForMap(p.mapID or 0)
+        local tx, ty = ns.TransitWaypoint(p.mapID, p.instance)
+        lines[#lines + 1] = ("superTrack type=%s quest=%s mapPin=%s:%s vignette=%s userWP=%s transit=%s,%s world=%s,%s"):format(
+            tostring(ST.GetHighestPrioritySuperTrackingType and ST.GetHighestPrioritySuperTrackingType()),
+            tostring(ST.GetSuperTrackedQuestID()), tostring(pinType), tostring(pinID),
+            tostring(ST.GetSuperTrackedVignette and ST.GetSuperTrackedVignette()),
+            tostring(ST.IsSuperTrackingUserWaypoint()), tostring(wx), tostring(wy), tostring(tx), tostring(ty))
         for _, e in ipairs(ns.scanResults) do
             local dx, dy = e.x - (p.x or 0), e.y - (p.y or 0)
             local dist = ns.math.Distance(dx, dy)
@@ -107,7 +119,7 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                 local mcx, mcy = TrueCenter(m)
                 if mcx then mx, my = mcx - clipCX, mcy - clipCY end
             end
-            lines[#lines + 1] = ("%s '%s' rel=%.0fdeg(%s) %s renderXY=%.0f,%.0f shown=%s alpha=%.2f scale=%.2f dist=%d")
+            lines[#lines + 1] = ("%s '%s' rel=%.0fdeg(%s) %s renderXY=%.0f,%.0f shown=%s alpha=%.2f scale=%.2f dist=%d atlas=%s class=%s")
                 :format(
                     e.key, e.title or "?",
                     rel and math.deg(rel) or 0,
@@ -115,7 +127,7 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                     rel and (math.abs(rel) <= fovHalf and "IN-FOV" or "OUT") or "?",
                     mx, my,
                     tostring(m and m:IsShown()), m and m:GetAlpha() or -1, m and m:GetScale() or -1,
-                    dist)
+                    dist, tostring(e.atlas or e.textureIndex), tostring(e.classification))
         end
         _G.Nocturne.ShowCopyText("Nocturne: Compass — diag", table.concat(lines, "\n"))
     elseif msg == "toggle" then

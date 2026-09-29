@@ -9,33 +9,19 @@ local glowOn = false
 
 local DIST_Y = -17 -- distance label offset from the bar's center
 local DIST_SIZE = 9
+-- The selected (super-tracked) marker is at least this many bar heights
+-- tall and isn't clipped, so it pokes out above and below the bar.
+local SELECTED_POP = 1.4
+local SELECTED_SCALE = 1.25
 
-local QC = Enum.QuestClassification
-
-local ATLAS_FALLBACK = "QuestNormal"
-local function AtlasFor(entry)
-    local candidates
-    if entry.isTransit then
-        candidates = { "Navigation-Tracked-Arrow", "MinimapArrow" }
-    elseif entry.isComplete then
-        candidates = { "QuestTurnin", ATLAS_FALLBACK }
-    elseif entry.isWorldQuest then
-        candidates = { "worldquest-questicon-questionmark", ATLAS_FALLBACK }
-    elseif entry.classification == QC.Campaign then
-        candidates = { "QuestCampaign", ATLAS_FALLBACK }
-    elseif entry.classification == QC.Important then
-        candidates = { "QuestImportant", ATLAS_FALLBACK }
-    elseif entry.classification == QC.Legendary then
-        candidates = { "QuestLegendary", ATLAS_FALLBACK }
-    elseif entry.classification == QC.Recurring then
-        candidates = { "QuestRecurring", ATLAS_FALLBACK }
-    else
-        candidates = { ATLAS_FALLBACK }
-    end
-    for _, name in ipairs(candidates) do
-        if C_Texture.GetAtlasInfo(name) then return name end
-    end
+-- Distance label offset for a marker of `size`: below the icon when it's
+-- taller than the bar.
+local function DistY(size)
+    return math.min(DIST_Y, -size / 2 - 4)
 end
+
+local GetPOITextureCoords = (C_Minimap and C_Minimap.GetPOITextureCoords) or _G.GetPOITextureCoords
+local POI_TEXTURE = "Interface\\Minimap\\POIIcons"
 
 local function CreateMarker()
     local m = CreateFrame("Frame", nil, ns.clip)
@@ -64,22 +50,30 @@ function ns:GetMarkerFrame(key)
     return pool[key]
 end
 
+-- Providers resolve and validate the icon at scan time: `entry.atlas`, or a
+-- POI texture index for map icons without an atlas.
 local function ApplyIcon(m, entry)
-    local atlas = AtlasFor(entry)
+    local atlas = entry.atlas
     local layer = entry.isSuperTracked and 2 or entry.isComplete and 1 or 0
-    local sig = tostring(atlas) .. ":" .. layer
+    local sig = tostring(atlas or entry.textureIndex) .. ":" .. layer
     if m._iconSig == sig then return end
     m._iconSig = sig
 
+    local drawn = true
     if atlas then
         m.icon:SetTexture("Interface\\Buttons\\WHITE8x8") -- clear any flat color
         m.icon:SetAtlas(atlas)
+    elseif entry.textureIndex and GetPOITextureCoords then
+        m.icon:SetTexture(POI_TEXTURE)
+        m.icon:SetTexCoord(GetPOITextureCoords(entry.textureIndex))
     else
         -- Last resort: a flat accent square.
         m.icon:SetTexture("Interface\\Buttons\\WHITE8x8")
+        m.icon:SetTexCoord(0, 1, 0, 1)
+        drawn = false
     end
 
-    if entry.isSuperTracked or not atlas then
+    if not drawn then
         local c = T.colors.accent
         m.icon:SetVertexColor(c[1], c[2], c[3], 1)
     else
@@ -87,6 +81,7 @@ local function ApplyIcon(m, entry)
     end
 
     -- Edge stacking order (above the drum): open < completed < super-tracked.
+    m:SetParent(entry.isSuperTracked and ns.frame or ns.clip)
     m:SetFrameLevel(ns.clip:GetFrameLevel() + 1 + layer)
     m.dist:SetDrawLayer("OVERLAY", layer)
 end
@@ -161,8 +156,18 @@ function ns:UpdateMarkers()
             rel = m._side * math.abs(rel)
         end
         m._side = rel < 0 and -1 or 1
+        -- Transit arrow (drawn pointing up = straight ahead) turns towards
+        -- the waypoint; SetRotation is CCW while rel > 0 means right. Other
+        -- icons are only reset once, so POI sheet crops are never touched.
+        if e.isTransit then
+            m.icon:SetRotation(-rel)
+            m._rotated = true
+        elseif m._rotated then
+            m.icon:SetRotation(0)
+            m._rotated = false
+        end
 
-        if e.provider:IsInRegion(e) then
+        if e.provider:IsInRegion(e, dist) then
             m:Hide()
             m.dist:Hide()
             if not bannerDist or dist < bannerDist then
@@ -172,7 +177,9 @@ function ns:UpdateMarkers()
         else
             local t = ns.math.Clamp(dist / db.scaleRange, 0, 1)
             local scale = ns.math.Lerp(db.maxScale, db.minScale, t)
-            if e.isSuperTracked then scale = scale * 1.25 end
+            if e.isSuperTracked then
+                scale = math.max(scale * SELECTED_SCALE, db.height * SELECTED_POP / MARKER_SIZE)
+            end
 
             -- Outside the compass FOV: pin the marker to the near edge of
             -- the bar (like Skyrim/ESO's compass) instead of hiding it, so
@@ -181,6 +188,7 @@ function ns:UpdateMarkers()
             -- clipped. Anchoring is deferred to the edge pass below, where
             -- same-type markers are grouped into one overlapping slot.
             local size = MARKER_SIZE * scale
+            m._distY = DistY(size)
             local halfW = ns:EdgeHalfWidth(size / 2 + EDGE_PAD)
             local rawX = rel * pxPerRad
             local x = ns.math.Clamp(rawX, -halfW, halfW)
@@ -216,7 +224,7 @@ function ns:UpdateMarkers()
                 m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
                 m.dist:ClearAllPoints()
                 if not atEdge then
-                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, DIST_Y)
+                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
                     m.dist:Show()
                 end
             else
@@ -248,7 +256,7 @@ function ns:UpdateMarkers()
         local x = side * ns:EdgeHalfWidth(w / 2 + EDGE_PAD + off)
         m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
         if db.showDistance then
-            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, DIST_Y)
+            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
             m.dist:Show()
         end
     end
@@ -285,7 +293,11 @@ function ns:ApplyBanner()
     if not banner then return end
     local db = ns.db
     local y = -db.height / 2 - 4
-    if db.showDistance then y = math.min(y, DIST_Y - DIST_SIZE) end
+    if db.showDistance then
+        -- Clear the largest the selected marker can get (close + max scale).
+        local selectedMax = math.max(db.height * SELECTED_POP, MARKER_SIZE * db.maxScale * SELECTED_SCALE)
+        y = math.min(y, DistY(selectedMax) - DIST_SIZE)
+    end
     banner:SetFont(T.fonts.main, db.bannerSize, "OUTLINE")
     banner:ClearAllPoints()
     banner:SetPoint("TOP", ns.frame, "CENTER", 0, y)
@@ -298,16 +310,16 @@ function ns:InitMarkers()
     ns:ApplyBanner()
 end
 
--- Rescan triggers: quest/zone/super-track changes. Marker positions and
--- bearings are still recomputed every frame from cached world coords.
-for _, event in ipairs({
+ns.RescanOn({
     "QUEST_WATCH_LIST_CHANGED",
     "QUEST_LOG_UPDATE",
     "QUEST_POI_UPDATE",
-    "SUPER_TRACKING_CHANGED",
     "ZONE_CHANGED",
+})
+ns.RescanOn({
+    "SUPER_TRACKING_CHANGED",
+    "SUPER_TRACKING_PATH_UPDATED",
+    "QUESTLINE_UPDATE",
     "ZONE_CHANGED_NEW_AREA",
     "PLAYER_ENTERING_WORLD",
-}) do
-    Nocturne.RegisterEvent(event, function() ns.scanDirty = true end)
-end
+}, true)

@@ -15,6 +15,7 @@ Init.lua
 DB.lua
 Math.lua
 Providers\TrackedQuests.lua
+Providers\MapPins.lua
 Compass.lua
 Markers.lua
 Options.lua

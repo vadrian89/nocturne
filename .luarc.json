@@ -34,6 +34,7 @@
         "GetQuestUiMapID",
         "GetPOITextureCoords",
         "GetSubZoneText",
+        "GetTime",
         "GetZoneText",
         "IsInInstance",
         "Mixin",
