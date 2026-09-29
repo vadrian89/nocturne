@@ -80,6 +80,11 @@ local function ApplyIcon(m, entry)
     else
         m.icon:SetVertexColor(1, 1, 1, 1)
     end
+
+    -- Super-tracked draws above the rest of its edge stack (and the drum).
+    local top = entry.isSuperTracked and 1 or 0
+    m:SetFrameLevel(ns.clip:GetFrameLevel() + 1 + top)
+    m.dist:SetDrawLayer("OVERLAY", top)
 end
 
 function ns:RescanPOI()
@@ -96,12 +101,21 @@ function ns:RescanPOI()
 end
 
 local MARKER_SIZE = 14
-local EDGE_PAD = 3 -- extra breathing room beyond the icon's own half-size
-local EDGE_GAP = 2 -- spacing between markers fanned out at the same edge
+local EDGE_PAD = 3     -- extra breathing room beyond the icon's own half-size
+local EDGE_GAP = 2     -- spacing between marker groups fanned out at the same edge
 local EDGE_ALPHA = 0.5 -- out-of-FOV (behind) markers pinned to the edge
 -- Directly behind the player |rel| sits near pi and flips sign on the
 -- slightest turn; keep the previous edge until it clearly moves past.
 local BEHIND_HYST = math.rad(10)
+
+-- Per-frame scratch for the edge pass (reused, no per-frame churn). At-edge
+-- markers of the same type share one slot and overlap; edgeMax records each
+-- (side, type)'s biggest icon so the slot's shared anchor keeps even the
+-- largest member inside the clip.
+local edgeList = {}
+local edgeMax = { [-1] = {}, [1] = {} }
+local edgeOff = { [-1] = {}, [1] = {} }
+local edgeUsed = { [-1] = 0, [1] = 0 }
 
 -- Anchor points define the clip's size lazily; GetWidth() can briefly read 0
 -- before the layout engine resolves it (e.g. right after login/reload), so
@@ -119,10 +133,12 @@ function ns:UpdateMarkers()
     local p = ns.player
     local pxPerRad = ns.pxPerRad
     local bannerTitle, bannerDist
-    -- Several out-of-FOV markers can share the same clamped edge position;
-    -- fan them out horizontally (towards the center) so they don't render
-    -- as one indistinguishable stack.
-    local edgeUsed = { [-1] = 0, [1] = 0 }
+    local edgeN = 0
+    wipe(edgeMax[-1])
+    wipe(edgeMax[1])
+    wipe(edgeOff[-1])
+    wipe(edgeOff[1])
+    edgeUsed[-1], edgeUsed[1] = 0, 0
 
     for _, m in pairs(pool) do m._seen = false end
 
@@ -141,6 +157,7 @@ function ns:UpdateMarkers()
 
         if e.provider:IsInRegion(e) then
             m:Hide()
+            m.dist:Hide()
             if not bannerDist or dist < bannerDist then
                 bannerDist = dist
                 bannerTitle = e.title
@@ -154,41 +171,79 @@ function ns:UpdateMarkers()
             -- the bar (like Skyrim/ESO's compass) instead of hiding it, so
             -- the player still knows which side to turn towards. The margin
             -- accounts for this marker's own scaled size so it never gets
-            -- clipped, and stacked markers fan inward from the edge.
+            -- clipped. Anchoring is deferred to the edge pass below, where
+            -- same-type markers are grouped into one overlapping slot.
             local size = MARKER_SIZE * scale
             local halfW = ns:EdgeHalfWidth(size / 2 + EDGE_PAD)
             local rawX = rel * pxPerRad
             local x = ns.math.Clamp(rawX, -halfW, halfW)
             local atEdge = x ~= rawX
-            if atEdge then
-                local side = x < 0 and -1 or 1
-                x = x - side * edgeUsed[side]
-                edgeUsed[side] = edgeUsed[side] + size + EDGE_GAP
-            end
 
             m:Show()
             m:ClearAllPoints()
             m:SetScale(scale)
-            -- SetPoint offsets are in the anchored frame's OWN scaled space
-            -- (proven via /ncmp diag): divide by the marker's scale so x stays
-            -- in clip units.
-            m:SetPoint("CENTER", ns.clip, "CENTER", x / scale, 0)
-            m:SetAlpha(atEdge and EDGE_ALPHA or ns.math.Lerp(1, 0.45, t))
+            local alpha = 1
+            if not e.isSuperTracked then
+                alpha = atEdge and EDGE_ALPHA or ns.math.Lerp(1, 0.45, t)
+            end
+            m:SetAlpha(alpha)
+
+            if atEdge then
+                local side = x < 0 and -1 or 1
+                local group = e.provider.name
+                local gm = edgeMax[side]
+                if (gm[group] or 0) < size then gm[group] = size end
+                m._eside, m._egroup = side, group
+                edgeN = edgeN + 1
+                edgeList[edgeN] = m
+            else
+                -- SetPoint offsets are in the anchored frame's OWN scaled
+                -- space (proven via /ncmp diag): divide by the marker's
+                -- scale so x stays in clip units.
+                m:SetPoint("CENTER", ns.clip, "CENTER", x / scale, 0)
+            end
 
             if db.showDistance then
                 m.dist:SetText(BreakUpLargeNumbers(math.floor(dist + 0.5)))
-                m.dist:SetAlpha(atEdge and EDGE_ALPHA or 1)
+                m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
                 m.dist:ClearAllPoints()
-                m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
-                m.dist:Show()
+                if not atEdge then
+                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
+                    m.dist:Show()
+                end
             else
                 m.dist:Hide()
             end
         end
     end
 
+    -- Edge pass: same-type markers get the same x and render as one stack;
+    -- each new type fans inward by its own slot width. Stacked distance
+    -- labels overlap too — unreadable, but kept per-marker.
+    for i = 1, edgeN do
+        local m = edgeList[i]
+        edgeList[i] = nil
+        local side, group = m._eside, m._egroup
+        local offs = edgeOff[side]
+        local off = offs[group]
+        if not off then
+            off = edgeUsed[side]
+            offs[group] = off
+            edgeUsed[side] = off + edgeMax[side][group] + EDGE_GAP
+        end
+        local x = side * (ns:EdgeHalfWidth(edgeMax[side][group] / 2 + EDGE_PAD) - off)
+        m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
+        if db.showDistance then
+            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
+            m.dist:Show()
+        end
+    end
+
     for _, m in pairs(pool) do
-        if not m._seen then m:Hide() end
+        if not m._seen then
+            m:Hide()
+            m.dist:Hide()
+        end
     end
 
     -- In-region banner: pulsing quest/zone name on the bar.
