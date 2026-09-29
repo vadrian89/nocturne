@@ -69,6 +69,14 @@
         "issecretvalue",
         "strlower",
         "strtrim",
-        "wipe"
+        "wipe",
+        "MenuUtil",
+        "HasNewMail",
+        "GetLatestThreeSenders",
+        "C_Calendar",
+        "C_CraftingOrders",
+        "C_DateAndTime",
+        "C_PvP",
+        "GetMinimapZoneText"
     ]
 }
