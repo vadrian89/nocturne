@@ -5,11 +5,14 @@ function ns:InitOptions()
         function() ns:ApplyLayout() end)
     ns.category = s.category
 
-    s:Checkbox("enabled", "Enable compass", "Show or hide the navigation bar.")
+    s:Dropdown("display", "Display", "Which navigation UI to show. With the compass alone, what lived on " ..
+        "the minimap (addon buttons, tracking, calendar, expansion summary) moves to a menu button next " ..
+        "to the bar, with mail, calendar invite and crafting order indicators.",
+        { "Compass (hide minimap)", "Minimap (hide compass)", "Compass and minimap" })
     s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
+    s:Checkbox("showZone", "Show zone name", "Current zone above the bar, colored like the minimap's zone text.")
     s:Checkbox("showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
     s:Checkbox("showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
-    s:Checkbox("hideInInstances", "Hide in instances", "Dungeons, raids, battlegrounds and arenas.")
     s:Checkbox("hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
 
     s:Slider("width", "Bar width", "Length of the compass strip in pixels.", 200, 900, 10)
@@ -22,6 +25,7 @@ function ns:InitOptions()
     s:Slider("maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
     s:Slider("inRegionYards", "Area radius (yards)",
         "Distance to a quest objective that counts as 'inside' its region.", 10, 200, 5)
+    s:Slider("zoneSize", "Zone text size", "Font size of the zone name and coordinates above the bar.", 8, 24, 1)
     s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
 
@@ -110,7 +114,14 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
         end
         _G.Nocturne.ShowCopyText("Nocturne: Compass — diag", table.concat(lines, "\n"))
     elseif msg == "toggle" then
-        ns.db.enabled = not ns.db.enabled
+        -- Switch to the minimap and back to whichever compass mode was on.
+        local db = ns.db
+        if db.display == ns.DISPLAY_MINIMAP then
+            db.display = ns.lastCompassDisplay or ns.DISPLAY_BOTH
+        else
+            ns.lastCompassDisplay, db.display = db.display, ns.DISPLAY_MINIMAP
+        end
+        ns:ApplyLayout()
     else
         ns:OpenOptions()
     end

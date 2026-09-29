@@ -7,7 +7,6 @@ local T = Nocturne.Theme
 -- global-table lookup on every call.
 local GetPlayerFacing = GetPlayerFacing
 local UnitAffectingCombat = UnitAffectingCombat
-local IsInInstance = IsInInstance
 local GetBestMapForUnit = C_Map.GetBestMapForUnit
 local GetPlayerMapPosition = C_Map.GetPlayerMapPosition
 local GetWorldPosFromMapPos = C_Map.GetWorldPosFromMapPos
@@ -95,9 +94,55 @@ function ns:ApplyLayout()
     ns.frame:ClearAllPoints()
     ns.frame:SetPoint(p[1] or "CENTER", UIParent, p[1] or "CENTER", p[2] or 0, p[3] or 0)
 
+    -- Zone name centered above the bar, coordinates right beside it (or
+    -- centered on their own); lifted clear of the selected marker's pop-out.
+    local top = math.max(1, (ns:SelectedPopHeight() - db.height) / 2 + 1)
+    ns.zone:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
+    ns.coords:SetFont(T.fonts.main, db.zoneSize, "OUTLINE")
+    ns.zone:ClearAllPoints()
+    ns.zone:SetPoint("BOTTOM", ns.frame, "TOP", 0, top)
+    ns.zone:SetShown(db.showZone)
+    ns.coords:ClearAllPoints()
+    if db.showZone then
+        ns.coords:SetPoint("LEFT", ns.zone, "RIGHT", 8, 0)
+    else
+        ns.coords:SetPoint("BOTTOM", ns.frame, "TOP", 0, top)
+    end
     ns.coords:SetShown(db.showHeading)
     ns:RebuildDrum()
     ns:ApplyBanner()
+    ns:ApplyMinimap()
+end
+
+-- Blizzard's minimap zone text colors, by C_PvP zone type.
+local ZONE_COLORS = {
+    sanctuary = { 0.41, 0.8, 0.94 },
+    arena     = { 1.0, 0.1, 0.1 },
+    combat    = { 1.0, 0.1, 0.1 },
+    hostile   = { 1.0, 0.1, 0.1 },
+    friendly  = { 0.1, 1.0, 0.1 },
+    contested = { 1.0, 0.7, 0.0 },
+}
+local ZONE_DEFAULT = { 1.0, 0.82, 0.0 } -- NORMAL_FONT_COLOR
+local GetZonePVPInfo = (C_PvP and C_PvP.GetZonePVPInfo) or _G.GetZonePVPInfo
+
+-- Same text as the minimap: the subzone when there is one, else the zone.
+function ns:UpdateZone()
+    if not ns.zone then return end
+    local text = GetMinimapZoneText and GetMinimapZoneText()
+    if not text or text == "" then
+        text = GetSubZoneText()
+        if text == "" then text = GetZoneText() end
+    end
+    ns.zone:SetText(text or "")
+    local c = ZONE_COLORS[GetZonePVPInfo and GetZonePVPInfo() or ""] or ZONE_DEFAULT
+    ns.zone:SetTextColor(c[1], c[2], c[3], 1)
+end
+
+for _, event in ipairs({
+    "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD",
+}) do
+    Nocturne.RegisterEvent(event, function() ns:UpdateZone() end)
 end
 
 local function UpdatePlayer()
@@ -127,14 +172,8 @@ local function UpdatePlayer()
 end
 
 local function ShouldHide()
-    local p = ns.player
-    if not p.facing then return true end
-    if ns.db.hideInCombat and UnitAffectingCombat("player") then return true end
-    if ns.db.hideInInstances then
-        local _, instanceType = IsInInstance()
-        if instanceType and instanceType ~= "none" then return true end
-    end
-    return false
+    local db = ns.db
+    return db.display == ns.DISPLAY_MINIMAP or (db.hideInCombat and UnitAffectingCombat("player")) or false
 end
 
 -- Throttled to 60Hz: smooth enough to not be perceptible while still capping
@@ -142,31 +181,29 @@ end
 local UPDATE_INTERVAL = 1 / 60
 local sinceUpdate = 0
 
+-- The bar is hidden by fading (alpha 0); its buttons must also stop taking
+-- clicks.
+local function SetBarVisible(visible)
+    ns.frame:SetAlpha(visible and ns.db.opacity or 0)
+    ns.frame:EnableMouse(visible and not ns.db.locked)
+    if visible ~= ns.barVisible then
+        ns.barVisible = visible
+        ns:ApplyMinimap()
+    end
+end
+
 local function OnUpdate(_, elapsed)
     sinceUpdate = sinceUpdate + elapsed
     if sinceUpdate < UPDATE_INTERVAL then return end
     sinceUpdate = 0
 
-    if not ns.db.enabled then
-        ns.frame:SetAlpha(0)
-        ns.frame:EnableMouse(false)
+    if ShouldHide() then
+        SetBarVisible(false)
         return
     end
+    SetBarVisible(true)
 
     UpdatePlayer()
-
-    if ShouldHide() then
-        ns.frame:SetAlpha(0)
-        ns.frame:EnableMouse(false)
-        return
-    end
-    ns.frame:SetAlpha(ns.db.opacity)
-    ns.frame:EnableMouse(not ns.db.locked)
-
-    local facingCW = ns.FacingCW() or 0
-
-    ns.drum:ClearAllPoints()
-    ns.drum:SetPoint("CENTER", ns.clip, "CENTER", -facingCW * ns.pxPerRad, 0)
 
     if ns.db.showHeading then
         local p = ns.player
@@ -176,6 +213,20 @@ local function OnUpdate(_, elapsed)
             ns.coords:SetText("")
         end
     end
+
+    -- GetPlayerFacing() is nil inside instances: keep the bar (zone, coords,
+    -- minimap menu) but drop the heading strip and markers.
+    local canNavigate = ns.player.facing ~= nil
+    if canNavigate ~= ns.canNavigate then
+        ns.canNavigate = canNavigate
+        ns.drum:SetShown(canNavigate)
+        ns.centerTick:SetShown(canNavigate)
+        if not canNavigate then ns:HideMarkers() end
+    end
+    if not canNavigate then return end
+
+    ns.drum:ClearAllPoints()
+    ns.drum:SetPoint("CENTER", ns.clip, "CENTER", -ns.FacingCW() * ns.pxPerRad, 0)
 
     if ns.scanDirty then
         ns.scanDirty = false
@@ -218,11 +269,12 @@ function ns:CreateCompassFrame()
     local drum = CreateFrame("Frame", nil, clip)
     ns.drum = drum
 
-    local coords = T.CreateFontString(f, 12, T.colors.accent, "OVERLAY", "OUTLINE")
-    coords:SetPoint("BOTTOM", f, "TOP", 0, 1)
-    ns.coords = coords
+    ns.zone = T.CreateFontString(f, 12, nil, "OVERLAY", "OUTLINE")
+    ns.coords = T.CreateFontString(f, 12, T.colors.accent, "OVERLAY", "OUTLINE")
+    ns:InitMinimapButtons()
 
     f:SetScript("OnUpdate", OnUpdate)
 
     ns:ApplyLayout()
+    ns:UpdateZone()
 end

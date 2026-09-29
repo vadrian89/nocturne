@@ -14,6 +14,12 @@ local DIST_SIZE = 9
 local SELECTED_POP = 1.4
 local SELECTED_SCALE = 1.25
 
+-- Height of the selected marker at its usual (smallest) pop-out size; the
+-- labels above the bar keep clear of it.
+function ns:SelectedPopHeight()
+    return ns.db.height * SELECTED_POP
+end
+
 -- Distance label offset for a marker of `size`: below the icon when it's
 -- taller than the bar.
 local function DistY(size)
@@ -126,6 +132,24 @@ function ns:EdgeHalfWidth(margin)
     local w = ns.clip and ns.clip:GetWidth()
     if not w or w <= 0 then w = ns.db.width end
     return w / 2 - (margin or EDGE_PAD)
+end
+
+local function SetInRegion(on)
+    if on ~= glowOn then
+        glowOn = on
+        T.SetGlow(ns.frame, on)
+    end
+end
+
+-- Navigation unavailable (instances): clear every marker, label and banner.
+function ns:HideMarkers()
+    for _, m in pairs(pool) do
+        m:Hide()
+        m.dist:Hide()
+    end
+    banner._title = nil
+    banner:Hide()
+    SetInRegion(false)
 end
 
 function ns:UpdateMarkers()
@@ -271,10 +295,7 @@ function ns:UpdateMarkers()
     -- In-region banner: steady quest/zone name below the bar + a glow on
     -- the compass frame while inside.
     local inRegion = bannerTitle ~= nil and bannerTitle ~= ""
-    if inRegion ~= glowOn then
-        glowOn = inRegion
-        T.SetGlow(ns.frame, inRegion)
-    end
+    SetInRegion(inRegion)
     if inRegion then
         if banner._title ~= bannerTitle then
             banner._title = bannerTitle
