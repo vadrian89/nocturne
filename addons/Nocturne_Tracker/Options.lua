@@ -10,10 +10,19 @@ function ns:InitOptions()
 
     s:Checkbox("enabled", "Enable tracker", "Show the Nocturne quest list.")
     s:Checkbox("replaceBlizzard", "Replace Blizzard tracker",
-        "Hide the default objective tracker on the right side of the screen.")
+        "Hide the default objective tracker. Nocturne shows quests, bonus objectives, area world quests, "
+            .. "scenarios/delves/Mythic+, tracked achievements and recipes, plus quest item buttons.")
     s:Checkbox("locked", "Lock position",
         "Prevent dragging, make the empty area click-through and hide the frame while nothing is tracked.")
     s:Checkbox("hideInCombat", "Hide in combat", "Hide the list while in combat.")
+
+    s:Checkbox("showScenario", "Scenarios", "Scenario, delve and Mythic+ objectives (with the keystone timer).")
+    s:Checkbox("showAreaTasks", "Bonus objectives & area world quests",
+        "Tasks in the area you're in, shown automatically like the default tracker does.")
+    s:Checkbox("showAchievements", "Achievements", "Tracked achievements and their open criteria.")
+    s:Checkbox("showRecipes", "Recipes", "Tracked profession recipes with reagents in your bags.")
+    s:Checkbox("showItems", "Quest item buttons",
+        "Clickable quest items left of the list. In combat their position updates only after combat ends.")
 
     s:Slider("width", "Width", nil, 160, 500, 10)
     s:Slider("height", "Max height",

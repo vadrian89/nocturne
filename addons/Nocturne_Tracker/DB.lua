@@ -11,6 +11,11 @@ ns.defaults = {
     fontFace        = 1, -- index into ns.fontChoices
     bgOpacity       = 0.55, -- 0 = borderless floating text
     hideInCombat    = false,
+    showScenario    = true,  -- scenarios, delves, Mythic+
+    showAreaTasks   = true,  -- bonus objectives + world quests in the current area
+    showAchievements = true,
+    showRecipes     = true,
+    showItems       = true,  -- secure quest item buttons left of the list
 }
 
 -- Called from ADDON_LOADED (see Init.lua) — SavedVariables are nil until then.

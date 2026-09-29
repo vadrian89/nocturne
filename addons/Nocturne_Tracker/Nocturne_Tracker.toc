@@ -14,4 +14,9 @@
 Init.lua
 DB.lua
 Tracker.lua
+Sources\Scenario.lua
+Sources\Quests.lua
+Sources\Achievements.lua
+Sources\Recipes.lua
+ItemButtons.lua
 Options.lua
