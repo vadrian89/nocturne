@@ -96,6 +96,10 @@
         "C_CurrencyInfo",
         "C_Container",
         "RegisterStateDriver",
-        "bit"
+        "bit",
+        "C_Navigation",
+        "GetInstanceInfo",
+        "CreateSettingsButtonInitializer",
+        "SettingsPanel"
     ]
 }
