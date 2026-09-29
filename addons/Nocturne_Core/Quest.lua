@@ -26,6 +26,8 @@ QuestIcons(QC.Legendary, { "Quest-Legendary-Available", "legendaryavailablequest
     { "Quest-Legendary-TurnIn", "legendaryactivequesticon" })
 QuestIcons(QC.Calling, { "Quest-DailyCampaign-Available", "CampaignAvailableDailyQuestIcon" },
     { "Quest-DailyCampaign-TurnIn", "CampaignActiveDailyQuestIcon" })
+QuestIcons(QC.BonusObjective, { "QuestBonusObjective", "Bonus-Objective-Star" },
+    { "QuestBonusObjective", "Bonus-Objective-Star" })
 QuestIcons(QC.Meta, { "Quest-Meta-Available" }, { "Quest-Meta-TurnIn" })
 QuestIcons(QC.Recurring, { "Quest-Recurring-Available", "QuestDaily" },
     { "Quest-Recurring-TurnIn", "QuestRepeatableTurnin" })

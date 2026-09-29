@@ -45,3 +45,38 @@ function Nocturne.ShowCopyText(title, text)
     frame.editBox:SetFocus()
     frame.editBox:HighlightText()
 end
+
+-- Keeps a Blizzard frame hidden while `want()` is true. Such frames re-show
+-- themselves (events, Edit Mode), so OnShow -> Hide is the standard
+-- suppression; HookScript can't be removed, so the hook asks `want()` live.
+-- Only a frame we hid is ever re-shown, leaving Blizzard's own visibility
+-- logic (and other addons) alone otherwise. Frames holding secure children
+-- can't Hide()/Show() in combat: they're faded out instead, and a later
+-- Sync() (e.g. on PLAYER_REGEN_ENABLED) finishes the job.
+function Nocturne.NewSuppressor(getFrame, want)
+    local s = { hidden = false }
+    local hooked
+    local function Locked(f) return InCombatLockdown() and f:IsProtected() end
+    local function Suppress(f)
+        s.hidden = true
+        if Locked(f) then f:SetAlpha(0) else f:Hide() end
+    end
+    function s.Sync()
+        local f = getFrame()
+        if not f then return end
+        if not hooked then
+            hooked = true
+            f:HookScript("OnShow", function(frame)
+                if want() then Suppress(frame) end
+            end)
+        end
+        if want() then
+            Suppress(f)
+        elseif s.hidden and not Locked(f) then
+            s.hidden = false
+            f:SetAlpha(1)
+            f:Show()
+        end
+    end
+    return s
+end
