@@ -62,7 +62,8 @@ end
 
 local function ApplyIcon(m, entry)
     local atlas = AtlasFor(entry)
-    local sig = tostring(atlas) .. ":" .. tostring(entry.isSuperTracked)
+    local layer = entry.isSuperTracked and 2 or entry.isComplete and 1 or 0
+    local sig = tostring(atlas) .. ":" .. layer
     if m._iconSig == sig then return end
     m._iconSig = sig
 
@@ -81,10 +82,9 @@ local function ApplyIcon(m, entry)
         m.icon:SetVertexColor(1, 1, 1, 1)
     end
 
-    -- Super-tracked draws above the rest of its edge stack (and the drum).
-    local top = entry.isSuperTracked and 1 or 0
-    m:SetFrameLevel(ns.clip:GetFrameLevel() + 1 + top)
-    m.dist:SetDrawLayer("OVERLAY", top)
+    -- Edge stacking order (above the drum): open < completed < super-tracked.
+    m:SetFrameLevel(ns.clip:GetFrameLevel() + 1 + layer)
+    m.dist:SetDrawLayer("OVERLAY", layer)
 end
 
 function ns:RescanPOI()
@@ -103,17 +103,18 @@ end
 local MARKER_SIZE = 14
 local EDGE_PAD = 3     -- extra breathing room beyond the icon's own half-size
 local EDGE_GAP = 2     -- spacing between marker groups fanned out at the same edge
+local EDGE_SHIFT = 0.5 -- completed stack's inward shift, as a fraction of the open stack's width
 local EDGE_ALPHA = 0.5 -- out-of-FOV (behind) markers pinned to the edge
 -- Directly behind the player |rel| sits near pi and flips sign on the
 -- slightest turn; keep the previous edge until it clearly moves past.
 local BEHIND_HYST = math.rad(10)
 
 -- Per-frame scratch for the edge pass (reused, no per-frame churn). At-edge
--- markers of the same type share one slot and overlap; edgeMax records each
--- (side, type)'s biggest icon so the slot's shared anchor keeps even the
--- largest member inside the clip.
+-- markers of one provider share a slot; inside it, open and completed
+-- entries form two stacks (edgeMax[1] / edgeMax[2], keyed [side][provider])
+-- that partially overlap.
 local edgeList = {}
-local edgeMax = { [-1] = {}, [1] = {} }
+local edgeMax = { { [-1] = {}, [1] = {} }, { [-1] = {}, [1] = {} } }
 local edgeOff = { [-1] = {}, [1] = {} }
 local edgeUsed = { [-1] = 0, [1] = 0 }
 
@@ -134,8 +135,10 @@ function ns:UpdateMarkers()
     local pxPerRad = ns.pxPerRad
     local bannerTitle, bannerDist
     local edgeN = 0
-    wipe(edgeMax[-1])
-    wipe(edgeMax[1])
+    wipe(edgeMax[1][-1])
+    wipe(edgeMax[1][1])
+    wipe(edgeMax[2][-1])
+    wipe(edgeMax[2][1])
     wipe(edgeOff[-1])
     wipe(edgeOff[1])
     edgeUsed[-1], edgeUsed[1] = 0, 0
@@ -191,9 +194,10 @@ function ns:UpdateMarkers()
             if atEdge then
                 local side = x < 0 and -1 or 1
                 local group = e.provider.name
-                local gm = edgeMax[side]
+                local stack = e.isComplete and 2 or 1
+                local gm = edgeMax[stack][side]
                 if (gm[group] or 0) < size then gm[group] = size end
-                m._eside, m._egroup = side, group
+                m._eside, m._egroup, m._estack = side, group, stack
                 edgeN = edgeN + 1
                 edgeList[edgeN] = m
             else
@@ -217,21 +221,27 @@ function ns:UpdateMarkers()
         end
     end
 
-    -- Edge pass: same-type markers get the same x and render as one stack;
-    -- each new type fans inward by its own slot width. Stacked distance
-    -- labels overlap too — unreadable, but kept per-marker.
+    -- Edge pass: each provider gets a slot fanned inward from the edge. In
+    -- the slot, open entries stack at the edge and completed ones stack
+    -- shifted inward, partially covering them. Stacked distance labels
+    -- overlap too — unreadable, but kept per-marker.
     for i = 1, edgeN do
         local m = edgeList[i]
         edgeList[i] = nil
-        local side, group = m._eside, m._egroup
+        local side, group, stack = m._eside, m._egroup, m._estack
+        local openW = edgeMax[1][side][group]
+        local doneW = edgeMax[2][side][group]
+        local shift = (openW and doneW) and openW * EDGE_SHIFT or 0
         local offs = edgeOff[side]
         local off = offs[group]
         if not off then
             off = edgeUsed[side]
             offs[group] = off
-            edgeUsed[side] = off + edgeMax[side][group] + EDGE_GAP
+            edgeUsed[side] = off + math.max(openW or 0, shift + (doneW or 0)) + EDGE_GAP
         end
-        local x = side * (ns:EdgeHalfWidth(edgeMax[side][group] / 2 + EDGE_PAD) - off)
+        local w = stack == 2 and doneW or openW
+        if stack == 2 then off = off + shift end
+        local x = side * ns:EdgeHalfWidth(w / 2 + EDGE_PAD + off)
         m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
         if db.showDistance then
             m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, -17)
