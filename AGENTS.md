@@ -64,6 +64,11 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   math — Midnight marks combat-adjacent values secret.
 - `Mixin()` and `BackdropTemplateMixin` may both be missing; guard both.
 - Prefer `GameTooltip:AddLine` over `SetText` (LSP annotations mismatch).
+- The Personal Resource Display is `PersonalResourceDisplayFrame`
+  (`Blizzard_PersonalResourceDisplay`, an Edit Mode system), NOT the
+  player's nameplate — `C_NamePlate.GetNamePlateForUnit("player")` finds
+  nothing. Its visibility follows the user's Edit Mode setting; fade it with
+  `SetAlpha` on top, don't fight its Show/Hide.
 
 ## DRY
 

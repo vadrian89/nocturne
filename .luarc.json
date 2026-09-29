@@ -103,6 +103,18 @@
         "SettingsPanel",
         "GameTime_GetTime",
         "GameTime_GetLocalTime",
-        "GameTime_GetGameTime"
+        "GameTime_GetGameTime",
+        "GetSheathState",
+        "EnumerateFrames",
+        "UnitHealth",
+        "UnitHealthMax",
+        "UnitPower",
+        "UnitPowerMax",
+        "UnitPowerType",
+        "C_NamePlate",
+        "UnitExists"
+    ],
+    "workspace.library": [
+        "tools/luals"
     ]
 }

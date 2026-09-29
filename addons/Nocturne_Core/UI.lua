@@ -49,17 +49,27 @@ end
 -- Keeps a Blizzard frame hidden while `want()` is true. Such frames re-show
 -- themselves (events, Edit Mode), so OnShow -> Hide is the standard
 -- suppression; HookScript can't be removed, so the hook asks `want()` live.
--- Only a frame we hid is ever re-shown, leaving Blizzard's own visibility
--- logic (and other addons) alone otherwise. Frames holding secure children
--- can't Hide()/Show() in combat: they're faded out instead, and a later
--- Sync() (e.g. on PLAYER_REGEN_ENABLED) finishes the job.
+-- Only a frame we hid while it was shown is ever re-shown, leaving
+-- Blizzard's own visibility logic (and other addons) alone otherwise.
+-- Frames holding secure children can't Hide()/Show() in combat: they're
+-- faded out instead, and a later Sync() (e.g. on PLAYER_REGEN_ENABLED)
+-- finishes the job. Unit-watched frames (TargetFrame) are hidden by the
+-- state driver without OnHide while already hidden by us, so they're only
+-- re-shown while their unit still exists.
 function Nocturne.NewSuppressor(getFrame, want)
     local s = { hidden = false }
     local hooked
     local function Locked(f) return InCombatLockdown() and f:IsProtected() end
     local function Suppress(f)
+        if not f:IsShown() then return end
         s.hidden = true
         if Locked(f) then f:SetAlpha(0) else f:Hide() end
+    end
+    local function UnitGone(f)
+        local unit = f:GetAttribute("unit")
+        if type(unit) ~= "string" then return false end
+        local exists = UnitExists(unit)
+        return not Nocturne.IsSecret(exists) and not exists
     end
     function s.Sync()
         local f = getFrame()
@@ -72,10 +82,12 @@ function Nocturne.NewSuppressor(getFrame, want)
         end
         if want() then
             Suppress(f)
-        elseif s.hidden and not Locked(f) then
-            s.hidden = false
+        elseif s.hidden then
             f:SetAlpha(1)
-            f:Show()
+            if not Locked(f) then
+                s.hidden = false
+                if not UnitGone(f) then f:Show() end
+            end
         end
     end
     return s
