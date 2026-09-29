@@ -1,0 +1,20 @@
+## Interface: 120001
+## Title: Nocturne: Compass
+## Notes: Console-style navigation strip with tracked quest markers.
+## Author: Vadrian
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Misc_Map02
+## SavedVariables: NocturneCompassDB
+## Dependencies: Nocturne_Core
+## Category: User Interface
+## AddonCompartmentFunc: NocturneCompass_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: NocturneCompass_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: NocturneCompass_OnCompartmentLeave
+
+Init.lua
+DB.lua
+Math.lua
+Providers\TrackedQuests.lua
+Compass.lua
+Markers.lua
+Options.lua

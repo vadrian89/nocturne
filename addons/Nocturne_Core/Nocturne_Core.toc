@@ -1,0 +1,13 @@
+## Interface: 120001
+## Title: Nocturne: Core
+## Notes: Shared namespace and theme for the Nocturne addon suite.
+## Author: Vadrian
+## Version: 0.0.1
+## IconTexture: Interface\Icons\INV_Misc_Gear_01
+## SavedVariables: NocturneDB
+## DefaultState: enabled
+## Category: User Interface
+
+Init.lua
+Theme.lua
+UI.lua
