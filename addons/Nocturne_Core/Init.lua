@@ -22,10 +22,22 @@ function Nocturne.RegisterModule(name, module)
     return module
 end
 
+-- Shared SavedVariables defaults merge: fills missing keys in `dst` with
+-- `src`'s values, deep-copying tables. Call from ADDON_LOADED only.
+function Nocturne.MergeDefaults(dst, src)
+    for k, v in pairs(src) do
+        if dst[k] == nil then
+            dst[k] = type(v) == "table" and Nocturne.MergeDefaults({}, v) or v
+        end
+    end
+    return dst
+end
+
 -- Shared event bus: every module subscribes to game events through a single
 -- hidden frame instead of creating its own.
 local bus = CreateFrame("Frame")
 local listeners = {}
+local IsEventValid = C_EventUtils and C_EventUtils.IsEventValid
 
 bus:SetScript("OnEvent", function(_, event, ...)
     local list = listeners[event]
@@ -36,6 +48,12 @@ bus:SetScript("OnEvent", function(_, event, ...)
 end)
 
 function Nocturne.RegisterEvent(event, fn)
+    -- RegisterEvent errors on events the client doesn't know; skip them so
+    -- one renamed/removed event can't break the whole addon.
+    if IsEventValid and not IsEventValid(event) then
+        Nocturne.Debug("unknown event", event)
+        return
+    end
     local list = listeners[event]
     if not list then
         list = {}
