@@ -196,7 +196,7 @@ end
 
 local function ShouldHide()
     local db = ns.db
-    return db.display == ns.DISPLAY_MINIMAP or (db.hideInCombat and UnitAffectingCombat("player")) or false
+    return (db.hideInCombat and UnitAffectingCombat("player")) or false
 end
 
 -- Throttled to 60Hz: smooth enough to not be perceptible while still capping

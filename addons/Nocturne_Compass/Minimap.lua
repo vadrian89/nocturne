@@ -1,25 +1,124 @@
 local _, ns = ...
 
--- Optional minimap replacement: Blizzard's minimap is hidden while the bar
--- is shown, and what lived on it moves next to the bar — a menu button
+-- Optional minimap replacement: while the bar is shown, a menu button
 -- (expansion summary, calendar, tracking, addon compartment, other addons'
--- minimap buttons) plus mail / calendar invite / crafting order indicators.
+-- minimap buttons) sits next to it permanently; mail / calendar invite /
+-- crafting order indicators only join it while Blizzard's minimap itself
+-- is suppressed.
+--
+-- "Smart" mode brings the minimap up near a tracked quest, world quest or
+-- event and in instances, and drops it otherwise and in combat. While it's
+-- down the in-region glow uses pin proximity instead of the quest blob
+-- (see DB.lua / TrackedQuests.lua).
 
 local Nocturne = _G.Nocturne
+local UnitAffectingCombat = UnitAffectingCombat
+local IsInInstance = IsInInstance
+local GetTime = GetTime
 
 local BUTTON_SIZE = 18
 local BUTTON_GAP = 4
+-- Smart mode shows the minimap inside NEAR and hides it only past FAR, so
+-- standing on the line doesn't flip it every tick.
+local SMART_NEAR_YARDS = 150
+local SMART_FAR_YARDS = 175
+local EVENTS_TTL = 10
 
 local launcher
 local indicators = {}
+local smartShown = false
+
+local function Within(x, y, r)
+    local p = ns.player
+    local dx, dy = x - p.x, y - p.y
+    return dx * dx + dy * dy <= r * r
+end
+
+local function NearTrackedQuest(r)
+    for _, e in ipairs(ns.scanResults) do
+        if e.questID and not e.isTransit and Within(e.x, e.y, r) then return true end
+    end
+    return false
+end
+
+-- World positions of the world quests and area POI events on the map the
+-- quest POIs are drawn for, as a flat x1, y1, x2, y2, ... array. The
+-- getters allocate fresh tables, so the list is rebuilt per map/instance
+-- every few seconds instead of every tick.
+local eventPoints = {}
+local eventsMap, eventsInstance, eventsAt
+
+local function AddEventPoint(mapID, x, y, instance)
+    local wx, wy = ns.MapToWorld(mapID, x, y, instance)
+    if wx then
+        eventPoints[#eventPoints + 1] = wx
+        eventPoints[#eventPoints + 1] = wy
+    end
+end
+
+local function RebuildEventPoints(mapID, instance)
+    wipe(eventPoints)
+    if C_TaskQuest and C_TaskQuest.GetQuestsOnMap then
+        for _, info in ipairs(C_TaskQuest.GetQuestsOnMap(mapID) or {}) do
+            if info.x and info.y then AddEventPoint(mapID, info.x, info.y, instance) end
+        end
+    end
+    if C_AreaPoiInfo and C_AreaPoiInfo.GetEventsForMap then
+        for _, id in ipairs(C_AreaPoiInfo.GetEventsForMap(mapID) or {}) do
+            local poi = C_AreaPoiInfo.GetAreaPOIInfo(mapID, id)
+            if poi and poi.position then AddEventPoint(mapID, poi.position.x, poi.position.y, instance) end
+        end
+    end
+end
+
+local function NearEvent(r)
+    local instance = ns.player.instance
+    local mapID = C_QuestLog.GetMapForQuestPOIs and C_QuestLog.GetMapForQuestPOIs()
+    if not mapID or mapID == 0 then mapID = ns.player.mapID end
+    if not mapID or mapID == 0 or not instance then return false end
+    local now = GetTime()
+    if mapID ~= eventsMap or instance ~= eventsInstance or now - eventsAt >= EVENTS_TTL then
+        eventsMap, eventsInstance, eventsAt = mapID, instance, now
+        RebuildEventPoints(mapID, instance)
+    end
+    for i = 1, #eventPoints, 2 do
+        if Within(eventPoints[i], eventPoints[i + 1], r) then return true end
+    end
+    return false
+end
+
+local function EvalSmart()
+    if UnitAffectingCombat("player") then return false end
+    if IsInInstance() then return true end
+    local r = smartShown and SMART_FAR_YARDS or SMART_NEAR_YARDS
+    return NearTrackedQuest(r) or NearEvent(r)
+end
+
+-- Re-evaluates the cached smart state; true when it flipped.
+local function RefreshSmart()
+    local shown = ns.db and ns.db.display == ns.DISPLAY_SMART and EvalSmart() or false
+    local changed = shown ~= smartShown
+    smartShown = shown
+    return changed
+end
 
 -- The minimap stays hidden in compass mode even while the bar itself is
 -- away (combat), so it doesn't pop in and out.
 local function WantHidden()
-    return ns.db and ns.db.display == ns.DISPLAY_COMPASS or false
+    local db = ns.db
+    if not db then return false end
+    if db.display == ns.DISPLAY_COMPASS then return true end
+    if db.display == ns.DISPLAY_SMART then return not smartShown end
+    return false
 end
 
 local minimap = Nocturne.NewSuppressor(function() return _G.MinimapCluster end, WantHidden)
+
+-- Whether the current display mode has the minimap up (gates the quest
+-- blob in TrackedQuests' IsInRegion).
+function ns.MinimapShown()
+    return not WantHidden()
+end
 
 -- Texture from the first atlas the client has, else a plain icon file.
 local function SetIcon(tex, file, ...)
@@ -144,11 +243,13 @@ end
 
 local function Layout()
     if not launcher then return end
-    local shown = WantHidden() and ns.barVisible or false
-    launcher:SetShown(shown)
+    -- The menu button is always part of the bar; the moved minimap
+    -- indicators only matter while the real minimap is suppressed.
+    launcher:SetShown(ns.barVisible or false)
+    local suppressed = ns.barVisible and WantHidden()
     local prev = launcher
     for _, b in ipairs(indicators) do
-        local on = shown and b.count() > 0
+        local on = suppressed and b.count() > 0
         b:SetShown(on)
         if on then
             b:ClearAllPoints()
@@ -208,6 +309,7 @@ end
 
 -- Called from ApplyLayout and whenever the bar shows/hides.
 function ns:ApplyMinimap()
+    RefreshSmart()
     minimap.Sync()
     Layout()
 end
@@ -219,3 +321,18 @@ for _, event in ipairs({
     Nocturne.RegisterEvent(event, Layout)
 end
 Nocturne.RegisterEvent("PLAYER_REGEN_ENABLED", function() ns:ApplyMinimap() end)
+
+-- Smart mode reacts to place/combat transitions immediately and to
+-- quest-distance drift on a slow ticker (positions only change in
+-- OnUpdate, there is no event for crossing the 150y line). The frames are
+-- only touched when the smart state actually flips.
+local function SmartSync()
+    if ns.db and ns.db.display == ns.DISPLAY_SMART and RefreshSmart() then
+        minimap.Sync()
+        Layout()
+    end
+end
+for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "ZONE_CHANGED_NEW_AREA" }) do
+    Nocturne.RegisterEvent(event, SmartSync)
+end
+C_Timer.NewTicker(0.5, SmartSync)

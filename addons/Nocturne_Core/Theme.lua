@@ -39,6 +39,11 @@ function T.ApplyBackdrop(frame)
     frame:SetBackdropBorderColor(0.75, 0.75, 0.75, 1)
 end
 
+-- `text` wrapped in a |c color escape for a theme color (e.g. T.colors.accent).
+function T.ColorText(text, c)
+    return ("|cff%02x%02x%02x%s|r"):format(c[1] * 255, c[2] * 255, c[3] * 255, text)
+end
+
 function T.CreateFontString(parent, size, color, drawLayer, flags)
     local fs = parent:CreateFontString(nil, drawLayer or "OVERLAY")
     fs:SetFont(T.fonts.main, size or 12, flags or "")

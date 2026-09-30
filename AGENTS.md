@@ -69,6 +69,18 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   player's nameplate — `C_NamePlate.GetNamePlateForUnit("player")` finds
   nothing. Its visibility follows the user's Edit Mode setting; fade it with
   `SetAlpha` on top, don't fight its Show/Hide.
+- `C_Minimap.IsInsideQuestBlob` keeps answering with `MinimapCluster`
+  hidden (observed: the in-region glow persisted with the minimap
+  suppressed, even across a reload). Degrading the glow to pin distance while the minimap is
+  away has to be done explicitly (`ns.MinimapShown()` gate in
+  `TrackedQuests.lua`).
+- *(Unverified — read from Blizzard's UI source, not yet proven in-game.)*
+  The native Settings vertical layout has no free-text row: element
+  initializers create their frames through the ScrollBox factory, which
+  accepts a bare frame type ("Frame") in place of an XML template.
+  `Builder:Text` (Core `Settings.lua`) uses that + an InitFrame override
+  to render a description line; the extent is measured off a scratch
+  FontString (element width ~620px).
 
 ## DRY
 

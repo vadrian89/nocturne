@@ -195,10 +195,12 @@ end
 -- True while the player stands inside the quest's region. The quest blob
 -- (the yellow area on the map) is the real region boundary; quests without
 -- a blob fall back to a radius around the pin (GetDistanceSqToQuest
--- measures to the pin, never to the area — verified in-game).
+-- measures to the pin, never to the area — verified in-game). The blob is
+-- only consulted while the minimap is shown (display-mode contract, see
+-- DB.lua): IsInsideQuestBlob itself keeps answering with it hidden.
 function provider:IsInRegion(entry)
     if entry.isTransit then return false end
-    if IsInsideQuestBlob then
+    if IsInsideQuestBlob and ns.MinimapShown() then
         local inside = IsInsideQuestBlob(entry.questID)
         if not ns.IsSecret(inside) and inside then return true end
     end

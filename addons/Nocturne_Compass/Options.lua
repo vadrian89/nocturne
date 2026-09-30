@@ -1,14 +1,25 @@
 local _, ns = ...
 
+local T = _G.Nocturne.Theme
+
 function ns:InitOptions()
     local s = _G.Nocturne.NewSettings("Nocturne: Compass", "NocturneCompass_", ns.db, ns.defaults,
         function() ns:ApplyLayout() end)
     ns.category = s.category
 
-    s:Dropdown("display", "Display", "Which navigation UI to show. With the compass alone, what lived on " ..
-        "the minimap (addon buttons, tracking, calendar, expansion summary) moves to a menu button next " ..
-        "to the bar, with mail, calendar invite and crafting order indicators.",
-        { "Compass (hide minimap)", "Minimap (hide compass)", "Compass and minimap" })
+    s:Dropdown("display", "Display", "Which navigation UI to show. While the minimap is away, what lived " ..
+        "on it (addon buttons, tracking, calendar, expansion summary) moves to a menu button next to " ..
+        "the bar, with mail, calendar invite and crafting order indicators.",
+        { "Compass only", "Compass and minimap", "Smart" })
+    local accent = T.colors.accent
+    s:Text(
+        T.ColorText("Compass only", accent) .. " — the minimap stays hidden for good. The in-region " ..
+        "quest glow only lights up within the Area radius (below) of the quest pin instead of covering " ..
+        "the whole quest area.\n" ..
+        T.ColorText("Compass and minimap", accent) .. " — both are always shown.\n" ..
+        T.ColorText("Smart", accent) .. " — the minimap shows itself within 150 yards of a tracked quest, " ..
+        "world quest or event and in instances, so the in-region glow covers the whole quest area; " ..
+        "it hides otherwise and during combat.")
     s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
     s:Checkbox("anchorTop", "Anchor to top of screen",
         "Pin the bar to the top edge, leaving room for the clock, zone name and coordinates above it. " ..
@@ -93,11 +104,11 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
         local wx, wy = ST.GetNextWaypointForMap(p.mapID or 0)
         local tx, ty = ns.TransitWaypoint(p.mapID, p.instance)
         lines[#lines + 1] = ("superTrack type=%s quest=%s mapPin=%s:%s vignette=%s userWP=%s transit=%s,%s world=%s,%s")
-        :format(
-            tostring(ST.GetHighestPrioritySuperTrackingType and ST.GetHighestPrioritySuperTrackingType()),
-            tostring(ST.GetSuperTrackedQuestID()), tostring(pinType), tostring(pinID),
-            tostring(ST.GetSuperTrackedVignette and ST.GetSuperTrackedVignette()),
-            tostring(ST.IsSuperTrackingUserWaypoint()), tostring(wx), tostring(wy), tostring(tx), tostring(ty))
+            :format(
+                tostring(ST.GetHighestPrioritySuperTrackingType and ST.GetHighestPrioritySuperTrackingType()),
+                tostring(ST.GetSuperTrackedQuestID()), tostring(pinType), tostring(pinID),
+                tostring(ST.GetSuperTrackedVignette and ST.GetSuperTrackedVignette()),
+                tostring(ST.IsSuperTrackingUserWaypoint()), tostring(wx), tostring(wy), tostring(tx), tostring(ty))
 
         -- Raw inputs the client may restrict inside instances (nil or secret).
         local function S(v) return ns.IsSecret(v) and "<secret>" or tostring(v) end
@@ -113,11 +124,11 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
             local nx, ny
             if nav then nx, ny = nav:GetCenter() end
             lines[#lines + 1] = ("navigation state=%s dist=%s validScreen=%s clamped=%s frame=%s,%s screen=%.0fx%.0f")
-            :format(
-                S(N.GetTargetState and N.GetTargetState()), S(N.GetDistance and N.GetDistance()),
-                S(N.HasValidScreenPosition and N.HasValidScreenPosition()),
-                S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
-                UIParent:GetWidth(), UIParent:GetHeight())
+                :format(
+                    S(N.GetTargetState and N.GetTargetState()), S(N.GetDistance and N.GetDistance()),
+                    S(N.HasValidScreenPosition and N.HasValidScreenPosition()),
+                    S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
+                    UIParent:GetWidth(), UIParent:GetHeight())
         end
         local selected = ns.GetSelectedQuestID()
         local onMap = p.mapID and C_QuestLog.GetQuestsOnMap(p.mapID)
@@ -152,12 +163,13 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
         end
         _G.Nocturne.ShowCopyText("Nocturne: Compass — diag", table.concat(lines, "\n"))
     elseif msg == "toggle" then
-        -- Switch to the minimap and back to whichever compass mode was on.
+        -- Pop the minimap up next to the compass, then back to the mode
+        -- that was active (smart or compass only).
         local db = ns.db
-        if db.display == ns.DISPLAY_MINIMAP then
-            db.display = ns.lastCompassDisplay or ns.DISPLAY_BOTH
+        if db.display == ns.DISPLAY_BOTH then
+            db.display = ns.lastCompassDisplay or ns.DISPLAY_SMART
         else
-            ns.lastCompassDisplay, db.display = db.display, ns.DISPLAY_MINIMAP
+            ns.lastCompassDisplay, db.display = db.display, ns.DISPLAY_BOTH
         end
         ns:ApplyLayout()
     else

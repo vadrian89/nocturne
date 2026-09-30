@@ -1,10 +1,13 @@
 local _, ns = ...
 
--- What navigation UI is shown (`display`): the compass replaces the minimap,
--- the minimap alone, or both.
+-- What navigation UI is shown (`display`): the compass alone, both, or
+-- "smart" — the minimap shows itself near a tracked quest, world quest or
+-- event and in instances. Contract: the in-region glow follows the quest
+-- blob only while the minimap is up; with it hidden the glow falls back
+-- to pin proximity (the `inRegionYards` radius).
 ns.DISPLAY_COMPASS = 1
-ns.DISPLAY_MINIMAP = 2
-ns.DISPLAY_BOTH = 3
+ns.DISPLAY_BOTH = 2
+ns.DISPLAY_SMART = 3
 
 ns.defaults = {
     display       = ns.DISPLAY_BOTH,
@@ -36,7 +39,7 @@ function ns:InitDB()
     -- `display` replaced the `enabled` / `hideMinimap` switches.
     if db.display == nil then
         if db.enabled == false then
-            db.display = ns.DISPLAY_MINIMAP
+            db.display = ns.DISPLAY_BOTH
         elseif db.hideMinimap then
             db.display = ns.DISPLAY_COMPASS
         end
