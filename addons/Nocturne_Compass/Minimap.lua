@@ -160,6 +160,13 @@ local function TrackingInfo(i)
     return info, active
 end
 
+-- Tracking-menu categories that MapPins/TrackedQuests can render.
+local TRACKABLE_FILTERS = {}
+for _, name in ipairs({ "QuestPOIs", "TrivialQuests", "Digsites", "TaxiNode" }) do
+    local b = Enum.MinimapTrackingFilter and Enum.MinimapTrackingFilter[name]
+    if b then TRACKABLE_FILTERS[b] = true end
+end
+
 local function AddBlizzardEntries(root)
     local landing = _G.ExpansionLandingPageMinimapButton
     if landing and landing:IsShown() then
@@ -172,10 +179,15 @@ local function AddBlizzardEntries(root)
     end
 
     if C_Minimap and C_Minimap.GetNumTrackingTypes then
-        local tracking = root:CreateButton("Tracking")
+        -- Only the categories the compass can draw markers for; townsfolk,
+        -- gather/creature tracking and the rest stay on the minimap's own
+        -- tracking menu.
+        local tracking
         for i = 1, C_Minimap.GetNumTrackingTypes() do
             local name = TrackingInfo(i)
-            if name then
+            local f = C_Minimap.GetTrackingFilter and C_Minimap.GetTrackingFilter(i)
+            if name and f and f.filterID and TRACKABLE_FILTERS[f.filterID] then
+                tracking = tracking or root:CreateButton("Tracking")
                 tracking:CreateCheckbox(name,
                     function() return select(2, TrackingInfo(i)) and true or false end,
                     function() C_Minimap.SetTracking(i, not select(2, TrackingInfo(i))) end)

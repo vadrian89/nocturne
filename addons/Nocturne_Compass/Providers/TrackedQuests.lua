@@ -16,35 +16,6 @@ ns.providers[#ns.providers + 1] = provider
 
 provider.results = {}
 
--- Maps worth scanning for quest POIs: only the zone the player is in.
--- The walk up the map ancestry covers the player standing inside a
--- cave/dungeon sub-map of the zone; quests anywhere else on the
--- continent/world are intentionally ignored.
-local function GetCandidateMaps(playerMapID)
-    local maps, seen = {}, {}
-    local function add(id)
-        if id and not seen[id] then
-            seen[id] = true
-            maps[#maps + 1] = id
-        end
-    end
-
-    add(playerMapID)
-    add(C_QuestLog.GetMapForQuestPOIs())
-
-    -- Climb the ancestry only while maps are sub-zone (caves/micro maps)
-    -- and stop at the zone/dungeon level — never add continent/world maps.
-    local info = C_Map.GetMapInfo(playerMapID)
-    while info do
-        local mt = info.mapType
-        add(info.mapID)
-        if mt ~= Enum.UIMapType.Micro and mt ~= Enum.UIMapType.Orphan then break end
-        if not info.parentMapID or info.parentMapID == 0 then break end
-        info = C_Map.GetMapInfo(info.parentMapID)
-    end
-    return maps
-end
-
 local function GetWatchedQuests(watched, order)
     for i = 1, C_QuestLog.GetNumQuestWatches() or 0 do
         local qid = C_QuestLog.GetQuestIDForQuestWatchIndex(i)
@@ -146,7 +117,7 @@ function provider:Scan(playerMapID, playerInstance)
     if #order == 0 then return results end
 
     local remaining = #order
-    for _, mapID in ipairs(GetCandidateMaps(playerMapID)) do
+    for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
         if remaining == 0 then break end
         remaining = remaining - MatchMap(mapID, watched)
     end
@@ -186,6 +157,42 @@ function provider:Scan(playerMapID, playerInstance)
             }
             e.atlas = QuestAtlas(e, w.found and w.found.isDaily)
             results[#results + 1] = e
+        end
+    end
+
+    -- Quest offers (available, unaccepted "!" givers) are never watched, so
+    -- they bypass the watched-set path entirely: trivial ones ride the
+    -- "Trivial Quests" filter, the rest the always-on "Quest POIs" filter.
+    local F = Enum.MinimapTrackingFilter or {}
+    local trivialOn = F.TrivialQuests and C_QuestLog.IsQuestTrivial
+        and ns.TrackingFilterActive(F.TrivialQuests)
+    local offersOn = not F.QuestPOIs or ns.TrackingFilterActive(F.QuestPOIs)
+    if trivialOn or offersOn then
+        for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
+            for _, info in ipairs(QuestOffersOnMap(mapID) or {}) do
+                local qid = info.questID
+                if qid and not watched[qid] and not ns.IsSecret(qid) and ns.OnMap(mapID, info.x, info.y) then
+                    local trivial = C_QuestLog.IsQuestTrivial and C_QuestLog.IsQuestTrivial(qid)
+                    if (trivial and trivialOn) or (not trivial and offersOn) then
+                        local wx, wy = ns.MapToWorld(mapID, info.x, info.y, playerInstance)
+                        if wx then
+                            local e = {
+                                key = "quest:" .. qid,
+                                provider = self,
+                                questID = qid,
+                                title = C_QuestLog.GetTitleForQuestID(qid) or info.questName or "Quest",
+                                x = wx,
+                                y = wy,
+                                isComplete = false,
+                                classification = C_QuestInfoSystem.GetQuestClassification(qid),
+                                isWorldQuest = false,
+                            }
+                            e.atlas = QuestAtlas(e, info.isDaily)
+                            results[#results + 1] = e
+                        end
+                    end
+                end
+            end
         end
     end
 

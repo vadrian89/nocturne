@@ -131,6 +131,42 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                     S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
                     UIParent:GetWidth(), UIParent:GetHeight())
         end
+        -- Tracked content (C_ContentTracking): what is followed, and what
+        -- the client places on the player's map for it.
+        local CT = C_ContentTracking
+        if CT and CT.GetTrackedIDs then
+            local sType, sID
+            if ST.GetSuperTrackedContent then sType, sID = ST.GetSuperTrackedContent() end
+            lines[#lines + 1] = ("content super=%s:%s"):format(S(sType), S(sID))
+            for tname, ttype in pairs(Enum.ContentTrackingType or {}) do
+                local ids = CT.GetTrackedIDs(ttype)
+                local res, infos
+                if CT.GetTrackablesOnMap and p.mapID then
+                    res, infos = CT.GetTrackablesOnMap(ttype, p.mapID)
+                end
+                lines[#lines + 1] = ("  type=%s(%s) tracked=%d onMap res=%s n=%d"):format(
+                    tname, S(ttype), ids and #ids or -1, S(res), infos and #infos or -1)
+                for _, info in ipairs(infos or {}) do
+                    lines[#lines + 1] = ("    id=%s x=%s y=%s wp='%s'"):format(
+                        S(info.trackableID), S(info.x), S(info.y), S(info.waypointText))
+                end
+            end
+        end
+        -- Active minimap tracking filters, by menu name.
+        if C_Minimap and C_Minimap.GetNumTrackingTypes then
+            local names = {}
+            for i = 1, C_Minimap.GetNumTrackingTypes() do
+                local info = C_Minimap.GetTrackingInfo(i)
+                local n, a
+                if type(info) == "table" then
+                    n, a = info.name, info.active
+                else
+                    n, _, a = C_Minimap.GetTrackingInfo(i)
+                end
+                if a then names[#names + 1] = S(n) end
+            end
+            lines[#lines + 1] = "tracking=" .. table.concat(names, ",")
+        end
         local selected = ns.GetSelectedQuestID()
         local onMap = p.mapID and C_QuestLog.GetQuestsOnMap(p.mapID)
         local objectives = selected and C_QuestLog.GetQuestObjectives(selected)

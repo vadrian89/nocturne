@@ -51,6 +51,51 @@ function ns.ContinentZones(mapID)
     return C_Map.GetMapChildrenInfo(top.mapID, Enum.UIMapType.Zone, true) or {}
 end
 
+-- Whether a map-relative point lies inside `mapID` itself. Some getters
+-- (e.g. C_TaxiMap.GetTaxiNodesForMap) return the whole continent's pins in
+-- the requested map's coordinates — points past [0,1], or inside the
+-- rectangle but on a neighbouring zone, belong elsewhere.
+function ns.OnMap(mapID, x, y)
+    if not x or not y or x < 0 or x > 1 or y < 0 or y > 1 then return false end
+    local info = C_Map.GetMapInfoAtPosition and C_Map.GetMapInfoAtPosition(mapID, x, y)
+    if not info then return true end
+    while info do
+        if info.mapID == mapID then return true end
+        local parent = info.parentMapID
+        info = parent and parent ~= 0 and C_Map.GetMapInfo(parent) or nil
+    end
+    return false
+end
+
+-- Maps worth scanning for POIs: only the zone the player is in. The walk
+-- up the map ancestry covers the player standing inside a cave/dungeon
+-- sub-map of the zone; quests/POIs anywhere else on the continent/world
+-- are intentionally ignored.
+function ns.CandidateMaps(mapID)
+    local maps, seen = {}, {}
+    local function add(id)
+        if id and not seen[id] then
+            seen[id] = true
+            maps[#maps + 1] = id
+        end
+    end
+
+    add(mapID)
+    add(C_QuestLog.GetMapForQuestPOIs())
+
+    -- Climb the ancestry only while maps are sub-zone (caves/micro maps)
+    -- and stop at the zone/dungeon level — never add continent/world maps.
+    local info = C_Map.GetMapInfo(mapID)
+    while info do
+        local mt = info.mapType
+        add(info.mapID)
+        if mt ~= Enum.UIMapType.Micro and mt ~= Enum.UIMapType.Orphan then break end
+        if not info.parentMapID or info.parentMapID == 0 then break end
+        info = C_Map.GetMapInfo(info.parentMapID)
+    end
+    return maps
+end
+
 -- Blizzard's next navigation waypoint towards whatever is super-tracked.
 -- The client only returns one when the route leaves the map (portal, boat,
 -- zone exit — see AGENTS.md); asked from the player's map upwards since a
@@ -75,6 +120,20 @@ function ns.GetSelectedQuestID()
         local pinType, pinID = C_SuperTrack.GetSuperTrackedMapPin()
         if pinType == QUEST_OFFER and pinID and pinID > 0 then return pinID end
     end
+end
+
+-- Whether a minimap tracking filter bit (Enum.MinimapTrackingFilter) is
+-- toggled on in the tracking menu. GetTrackingInfo returns a table on
+-- current clients, loose values on older ones.
+function ns.TrackingFilterActive(bit)
+    if not (C_Minimap and C_Minimap.GetNumTrackingTypes) then return false end
+    for i = 1, C_Minimap.GetNumTrackingTypes() do
+        local f = C_Minimap.GetTrackingFilter and C_Minimap.GetTrackingFilter(i)
+        local info = C_Minimap.GetTrackingInfo(i)
+        local active = type(info) == "table" and info.active or select(3, C_Minimap.GetTrackingInfo(i))
+        if f and f.filterID == bit and active then return true end
+    end
+    return false
 end
 
 function ns.TransitAtlas()
