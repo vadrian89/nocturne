@@ -205,7 +205,6 @@ function provider:Scan(playerMapID, playerInstance)
         find = function(mapID, tid) return FindTrackable(mapID, selType, tid) end
         id, kind = selID, "ct" .. tostring(selType)
     end
-    self.hasVignette = kind == "vignette"
     if find and not transitX then
         local key = "pin:" .. kind .. ":" .. tostring(id)
         local hit = Locate(find, id, key, playerMapID)
@@ -289,6 +288,53 @@ function provider:Scan(playerMapID, playerInstance)
         end
     end
 
+    -- Battle-pet tracking is a separate flag from the MinimapTrackingFilter
+    -- bits; a selected tamer super-tracks as an AreaPOI pin, so skip it here.
+    if C_Minimap.IsTrackingBattlePets and C_Minimap.IsTrackingBattlePets()
+        and C_PetInfo and C_PetInfo.GetPetTamersForMap then
+        for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
+            for _, tamer in ipairs(C_PetInfo.GetPetTamersForMap(mapID) or {}) do
+                if tamer.position and not (kind == "poi" and tamer.areaPoiID == id)
+                    and ns.OnMap(mapID, tamer.position.x, tamer.position.y) then
+                    self:Add(results, playerInstance, mapID, tamer.position, {
+                        key = "pin:tamer:" .. tostring(tamer.areaPoiID),
+                        title = tamer.name,
+                        atlas = tamer.atlasName,
+                        textureIndex = tamer.textureIndex,
+                    })
+                end
+            end
+        end
+    end
+
+    -- The zone's own points of interest: vignettes are exactly what the
+    -- minimap draws as blips (rares, treasures, delve entrances, zone
+    -- events). No tracking filter exists for them; they are always on.
+    -- Townsfolk blips, by contrast, are engine-drawn with no Lua position
+    -- API, so they can never reach the compass.
+    if C_VignetteInfo and C_VignetteInfo.GetVignettes then
+        for _, guid in ipairs(C_VignetteInfo.GetVignettes() or {}) do
+            if not ns.IsSecret(guid) and not (kind == "vignette" and guid == id) then
+                local info = C_VignetteInfo.GetVignetteInfo(guid)
+                if info and info.onMinimap then
+                    for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
+                        local pos = C_VignetteInfo.GetVignettePosition(guid, mapID)
+                        if pos and ns.OnMap(mapID, pos.x, pos.y) then
+                            local name = info.name
+                            if ns.IsSecret(name) or name == "" then name = nil end
+                            self:Add(results, playerInstance, mapID, pos, {
+                                key = "pin:vignette:" .. guid,
+                                title = name,
+                                atlas = info.atlasName,
+                            })
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     return results
 end
 
@@ -303,13 +349,5 @@ ns.RescanOn({
     "CONTENT_TRACKING_UPDATE", "CONTENT_TRACKING_LIST_UPDATE",
     "TRACKABLE_INFO_UPDATE", "TRACKING_TARGET_INFO_UPDATE",
     "NEIGHBORHOOD_MAP_DATA_UPDATED",
+    "VIGNETTES_UPDATED", "VIGNETTE_MINIMAP_UPDATED",
 }, true)
-
--- Vignettes (rares, treasures) come and go constantly; only rescan for
--- them while one is (or just was) super-tracked.
-_G.Nocturne.RegisterEvent("VIGNETTES_UPDATED", function()
-    if provider.hasVignette or
-        (C_SuperTrack.GetSuperTrackedVignette and C_SuperTrack.GetSuperTrackedVignette()) then
-        ns.MarkScanDirty(true)
-    end
-end)

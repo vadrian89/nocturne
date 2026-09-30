@@ -124,14 +124,23 @@ end
 
 -- Whether a minimap tracking filter bit (Enum.MinimapTrackingFilter) is
 -- toggled on in the tracking menu. GetTrackingInfo returns a table on
--- current clients, loose values on older ones.
-function ns.TrackingFilterActive(bit)
-    if not (C_Minimap and C_Minimap.GetNumTrackingTypes) then return false end
+-- current clients, loose values on older ones. `default` answers for a
+-- filter the menu doesn't list at all (e.g. Quest POIs on some clients).
+function ns.TrackingFilterActive(bit, default)
+    if not (C_Minimap and C_Minimap.GetNumTrackingTypes) then return default or false end
     for i = 1, C_Minimap.GetNumTrackingTypes() do
         local f = C_Minimap.GetTrackingFilter and C_Minimap.GetTrackingFilter(i)
         local info = C_Minimap.GetTrackingInfo(i)
         local active = type(info) == "table" and info.active or select(3, C_Minimap.GetTrackingInfo(i))
-        if f and f.filterID == bit and active then return true end
+        if f and f.filterID == bit then return active and true or false end
+    end
+    return default or false
+end
+
+-- Whether childMapID sits at or below ancestorMapID in the map tree.
+function ns.IsDescendantOf(childMapID, ancestorMapID)
+    for _, id in ipairs(ns.MapChain(childMapID)) do
+        if id == ancestorMapID then return true end
     end
     return false
 end

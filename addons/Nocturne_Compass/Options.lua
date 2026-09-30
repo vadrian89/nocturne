@@ -167,6 +167,7 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
             end
             lines[#lines + 1] = "tracking=" .. table.concat(names, ",")
         end
+        if p.mapID and ns.OfferDiag then ns.OfferDiag(p.mapID, lines) end
         local selected = ns.GetSelectedQuestID()
         local onMap = p.mapID and C_QuestLog.GetQuestsOnMap(p.mapID)
         local objectives = selected and C_QuestLog.GetQuestObjectives(selected)

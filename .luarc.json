@@ -15,6 +15,7 @@
         "C_QuestInfoSystem",
         "C_Housing",
         "C_HousingNeighborhood",
+        "C_PetInfo",
         "C_QuestLine",
         "C_ResearchInfo",
         "C_QuestLog",
