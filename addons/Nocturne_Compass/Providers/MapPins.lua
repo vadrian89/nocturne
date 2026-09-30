@@ -205,6 +205,7 @@ function provider:Scan(playerMapID, playerInstance)
         find = function(mapID, tid) return FindTrackable(mapID, selType, tid) end
         id, kind = selID, "ct" .. tostring(selType)
     end
+    self.sel = find and { find = find, id = id, kind = kind, key = "pin:" .. kind .. ":" .. tostring(id) } or nil
     if find and not transitX then
         local key = "pin:" .. kind .. ":" .. tostring(id)
         local hit = Locate(find, id, key, playerMapID)
@@ -336,6 +337,30 @@ function provider:Scan(playerMapID, playerInstance)
     end
 
     return results
+end
+
+-- /ncmp diag: where the selected pin resolves on each map that lists it,
+-- and how far that puts it from the player next to the client's own
+-- navigation distance (the nav diamond is the ground truth).
+function ns.PinDiag(playerMapID, instance, lines)
+    local sel = provider.sel
+    if not sel then return end
+    local nav = C_Navigation and C_Navigation.GetDistance and C_Navigation.GetDistance()
+    lines[#lines + 1] = ("selpin %s foundOn=%s navDist=%s"):format(sel.key, tostring(foundOn[sel.key]),
+        ns.IsSecret(nav) and "<secret>" or ("%.0f"):format(nav or -1))
+    local maps = ns.MapChain(playerMapID)
+    for _, child in ipairs(ns.ContinentZones(playerMapID)) do maps[#maps + 1] = child.mapID end
+    local p = ns.player
+    for _, mapID in ipairs(maps) do
+        local hit = sel.find(mapID, sel.id)
+        if hit then
+            local x, y = ns.MapToWorld(mapID, hit.pos.x, hit.pos.y, instance)
+            local d = x and p.x and math.sqrt((x - p.x) ^ 2 + (y - p.y) ^ 2)
+            local info = C_Map.GetMapInfo(mapID)
+            lines[#lines + 1] = ("  on map=%d type=%s xy=%.5f,%.5f dist=%s"):format(mapID,
+                tostring(info and info.mapType), hit.pos.x, hit.pos.y, d and ("%.0f"):format(d) or "nil")
+        end
+    end
 end
 
 -- Arrival: close enough that the bearing would swing wildly. A transit
