@@ -191,69 +191,65 @@ function ns:UpdateMarkers()
             m._rotated = false
         end
 
-        if e.provider:IsInRegion(e, dist) then
-            m:Hide()
-            m.dist:Hide()
-            if not bannerDist or dist < bannerDist then
-                bannerDist = dist
-                bannerTitle = e.title
+        if e.provider:IsInRegion(e, dist) and (not bannerDist or dist < bannerDist) then
+            bannerDist = dist
+            bannerTitle = e.title
+        end
+
+        local t = ns.math.Clamp(dist / db.scaleRange, 0, 1)
+        local scale = ns.math.Lerp(db.maxScale, db.minScale, t)
+        if e.isSuperTracked then
+            scale = math.max(scale * SELECTED_SCALE, db.height * SELECTED_POP / MARKER_SIZE)
+        end
+
+        -- Outside the compass FOV: pin the marker to the near edge of
+        -- the bar (like Skyrim/ESO's compass) instead of hiding it, so
+        -- the player still knows which side to turn towards. The margin
+        -- accounts for this marker's own scaled size so it never gets
+        -- clipped. Anchoring is deferred to the edge pass below, where
+        -- same-type markers are grouped into one overlapping slot.
+        local size = MARKER_SIZE * scale
+        m._distY = DistY(size)
+        local halfW = ns:EdgeHalfWidth(size / 2 + EDGE_PAD)
+        local rawX = rel * pxPerRad
+        local x = ns.math.Clamp(rawX, -halfW, halfW)
+        local atEdge = x ~= rawX
+
+        m:Show()
+        m:ClearAllPoints()
+        m:SetScale(scale)
+        local alpha = 1
+        if not e.isSuperTracked then
+            alpha = atEdge and EDGE_ALPHA or ns.math.Lerp(1, 0.45, t)
+        end
+        m:SetAlpha(alpha)
+
+        if atEdge then
+            local side = x < 0 and -1 or 1
+            local group = e.provider.name
+            local stack = e.isComplete and 2 or 1
+            local gm = edgeMax[stack][side]
+            if (gm[group] or 0) < size then gm[group] = size end
+            m._eside, m._egroup, m._estack = side, group, stack
+            edgeN = edgeN + 1
+            edgeList[edgeN] = m
+        else
+            -- SetPoint offsets are in the anchored frame's OWN scaled
+            -- space (proven via /ncmp diag): divide by the marker's
+            -- scale so x stays in clip units.
+            m:SetPoint("CENTER", ns.clip, "CENTER", x / scale, 0)
+        end
+
+        if db.showDistance then
+            m.dist:SetText(BreakUpLargeNumbers(math.floor(dist + 0.5)))
+            m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
+            m.dist:ClearAllPoints()
+            if not atEdge then
+                m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
+                m.dist:Show()
             end
         else
-            local t = ns.math.Clamp(dist / db.scaleRange, 0, 1)
-            local scale = ns.math.Lerp(db.maxScale, db.minScale, t)
-            if e.isSuperTracked then
-                scale = math.max(scale * SELECTED_SCALE, db.height * SELECTED_POP / MARKER_SIZE)
-            end
-
-            -- Outside the compass FOV: pin the marker to the near edge of
-            -- the bar (like Skyrim/ESO's compass) instead of hiding it, so
-            -- the player still knows which side to turn towards. The margin
-            -- accounts for this marker's own scaled size so it never gets
-            -- clipped. Anchoring is deferred to the edge pass below, where
-            -- same-type markers are grouped into one overlapping slot.
-            local size = MARKER_SIZE * scale
-            m._distY = DistY(size)
-            local halfW = ns:EdgeHalfWidth(size / 2 + EDGE_PAD)
-            local rawX = rel * pxPerRad
-            local x = ns.math.Clamp(rawX, -halfW, halfW)
-            local atEdge = x ~= rawX
-
-            m:Show()
-            m:ClearAllPoints()
-            m:SetScale(scale)
-            local alpha = 1
-            if not e.isSuperTracked then
-                alpha = atEdge and EDGE_ALPHA or ns.math.Lerp(1, 0.45, t)
-            end
-            m:SetAlpha(alpha)
-
-            if atEdge then
-                local side = x < 0 and -1 or 1
-                local group = e.provider.name
-                local stack = e.isComplete and 2 or 1
-                local gm = edgeMax[stack][side]
-                if (gm[group] or 0) < size then gm[group] = size end
-                m._eside, m._egroup, m._estack = side, group, stack
-                edgeN = edgeN + 1
-                edgeList[edgeN] = m
-            else
-                -- SetPoint offsets are in the anchored frame's OWN scaled
-                -- space (proven via /ncmp diag): divide by the marker's
-                -- scale so x stays in clip units.
-                m:SetPoint("CENTER", ns.clip, "CENTER", x / scale, 0)
-            end
-
-            if db.showDistance then
-                m.dist:SetText(BreakUpLargeNumbers(math.floor(dist + 0.5)))
-                m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
-                m.dist:ClearAllPoints()
-                if not atEdge then
-                    m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
-                    m.dist:Show()
-                end
-            else
-                m.dist:Hide()
-            end
+            m.dist:Hide()
         end
     end
 
