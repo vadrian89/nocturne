@@ -192,17 +192,41 @@ function provider:Scan(playerMapID, playerInstance)
     return results
 end
 
+-- Enum.NavigationState: the super-tracked diamond is transparent in
+-- Invalid/Disabled and solid in Occluded/InRange.
+local NAV_STATE_INVALID, NAV_STATE_DISABLED = 0, 3
+
+-- The client's own "arrived" verdict: while a quest is super-tracked the
+-- navigation frame exists, and its target state flips to Invalid once the
+-- client decides the player reached the quest area (the gold diamond
+-- fades out). nil = no verdict (no navigation, or navigation disabled) —
+-- the caller falls back to pin distance.
+local function NavArrived()
+    local N = C_Navigation
+    if not (N and N.GetFrame and N.GetFrame()) then return nil end
+    local state = N.GetTargetState and N.GetTargetState()
+    if state == nil or ns.IsSecret(state) or state == NAV_STATE_DISABLED then return nil end
+    return state == NAV_STATE_INVALID
+end
+ns.NavArrived = NavArrived
+
 -- True while the player stands inside the quest's region. The quest blob
 -- (the yellow area on the map) is the real region boundary; quests without
 -- a blob fall back to a radius around the pin (GetDistanceSqToQuest
--- measures to the pin, never to the area — verified in-game). The blob is
--- only consulted while the minimap is shown (display-mode contract, see
--- DB.lua): IsInsideQuestBlob itself keeps answering with it hidden.
+-- measures to the pin, never to the area — verified in-game).
+-- IsInsideQuestBlob answers regardless of the minimap being suppressed
+-- (unverified whether it keeps updating long-term while hidden); if it
+-- can't answer for the selected quest, the navigation diamond's arrival
+-- state is the next-best verdict before falling back to pin distance.
 function provider:IsInRegion(entry)
     if entry.isTransit then return false end
-    if IsInsideQuestBlob and ns.MinimapShown() then
+    if IsInsideQuestBlob then
         local inside = IsInsideQuestBlob(entry.questID)
         if not ns.IsSecret(inside) and inside then return true end
+    end
+    if entry.isSuperTracked then
+        local arrived = NavArrived()
+        if arrived ~= nil then return arrived end
     end
     local distSq = C_QuestLog.GetDistanceSqToQuest(entry.questID)
     if not distSq or ns.IsSecret(distSq) then return false end

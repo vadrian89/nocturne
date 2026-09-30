@@ -2,9 +2,11 @@ local _, ns = ...
 
 -- What navigation UI is shown (`display`): the compass alone, both, or
 -- "smart" — the minimap shows itself near a tracked quest, world quest or
--- event and in instances. Contract: the in-region glow follows the quest
--- blob only while the minimap is up; with it hidden the glow falls back
--- to pin proximity (the `inRegionYards` radius).
+-- event, near the selected quest's navigation target and in instances.
+-- The in-region glow follows the quest blob regardless of the minimap
+-- (IsInsideQuestBlob answers with it suppressed); fallbacks are the
+-- navigation diamond's arrival state for the selected quest and pin
+-- proximity (the `inRegionYards` radius) for the rest.
 ns.DISPLAY_COMPASS = 1
 ns.DISPLAY_BOTH = 2
 ns.DISPLAY_SMART = 3

@@ -14,12 +14,13 @@ function ns:InitOptions()
     local accent = T.colors.accent
     s:Text(
         T.ColorText("Compass only", accent) .. " — the minimap stays hidden for good. The in-region " ..
-        "quest glow only lights up within the Area radius (below) of the quest pin instead of covering " ..
-        "the whole quest area.\n" ..
+        "quest glow still follows the quest's real area, plus the selected quest's navigation " ..
+        "diamond arrival, else the Area radius (below) around the pin.\n" ..
         T.ColorText("Compass and minimap", accent) .. " — both are always shown.\n" ..
         T.ColorText("Smart", accent) .. " — the minimap shows itself within 150 yards of a tracked quest, " ..
-        "world quest or event and in instances, so the in-region glow covers the whole quest area; " ..
-        "it hides otherwise and during combat.")
+        "world quest or event, within the Area radius of the selected quest's target and in " ..
+        "instances, so the in-region glow covers the whole quest area; it hides otherwise and " ..
+        "during combat.")
     s:Checkbox("locked", "Lock position", "Prevent dragging the bar and make it click-through.")
     s:Checkbox("anchorTop", "Anchor to top of screen",
         "Pin the bar to the top edge, leaving room for the clock, zone name and coordinates above it. " ..

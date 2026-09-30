@@ -7,9 +7,9 @@ local _, ns = ...
 -- is suppressed.
 --
 -- "Smart" mode brings the minimap up near a tracked quest, world quest or
--- event and in instances, and drops it otherwise and in combat. While it's
--- down the in-region glow uses pin proximity instead of the quest blob
--- (see DB.lua / TrackedQuests.lua).
+-- event, near the selected quest's navigation target and in instances, and
+-- drops it otherwise and in combat. The in-region glow doesn't depend on
+-- it either way (see DB.lua / TrackedQuests.lua).
 
 local Nocturne = _G.Nocturne
 local UnitAffectingCombat = UnitAffectingCombat
@@ -71,6 +71,20 @@ local function RebuildEventPoints(mapID, instance)
     end
 end
 
+-- The selected quest's navigation anchor sits on the edge of its area, not
+-- on the pin, so C_Navigation.GetDistance is the distance to the area —
+-- the "Area radius" setting doubles as this trigger's threshold. Once the
+-- diamond has faded out (arrived) the anchor distance stops being a
+-- reliable "inside" signal, so that state counts too, unless the anchor is
+-- known to be far away.
+local function NearSelectedQuest(r)
+    if not ns.GetSelectedQuestID() then return false end
+    local d = C_Navigation and C_Navigation.GetDistance and C_Navigation.GetDistance()
+    if d ~= nil and ns.IsSecret(d) then d = nil end
+    if d and d <= r then return true end
+    return ns.NavArrived() == true and (d == nil or d <= SMART_FAR_YARDS)
+end
+
 local function NearEvent(r)
     local instance = ns.player.instance
     local mapID = C_QuestLog.GetMapForQuestPOIs and C_QuestLog.GetMapForQuestPOIs()
@@ -90,8 +104,10 @@ end
 local function EvalSmart()
     if UnitAffectingCombat("player") then return false end
     if IsInInstance() then return true end
-    local r = smartShown and SMART_FAR_YARDS or SMART_NEAR_YARDS
-    return NearTrackedQuest(r) or NearEvent(r)
+    local hyst = smartShown and (SMART_FAR_YARDS - SMART_NEAR_YARDS) or 0
+    local r = SMART_NEAR_YARDS + hyst
+    if NearTrackedQuest(r) or NearEvent(r) then return true end
+    return NearSelectedQuest(ns.db.inRegionYards + hyst)
 end
 
 -- Re-evaluates the cached smart state; true when it flipped.
@@ -113,12 +129,6 @@ local function WantHidden()
 end
 
 local minimap = Nocturne.NewSuppressor(function() return _G.MinimapCluster end, WantHidden)
-
--- Whether the current display mode has the minimap up (gates the quest
--- blob in TrackedQuests' IsInRegion).
-function ns.MinimapShown()
-    return not WantHidden()
-end
 
 -- Texture from the first atlas the client has, else a plain icon file.
 local function SetIcon(tex, file, ...)
