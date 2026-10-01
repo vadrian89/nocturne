@@ -1,0 +1,17 @@
+## Interface: 120001
+## Title: Nocturne: Gamepad
+## Notes: Console-style customization for the ConsolePort cluster bar.
+## Author: Vadrian
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Gauntlets_03
+## SavedVariables: NocturneGamepadDB
+## Dependencies: Nocturne_Core, ConsolePort_Bar
+## Category: User Interface
+## AddonCompartmentFunc: NocturneGamepad_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: NocturneGamepad_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: NocturneGamepad_OnCompartmentLeave
+
+Init.lua
+DB.lua
+Layout.lua
+Options.lua

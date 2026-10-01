@@ -177,3 +177,41 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
 - Branch `master`, conventional one-line commits + `Generated with Devin`
   footer. Never commit secrets. Do not overwrite user edits in .toc files
   (e.g. version fields) unless asked.
+
+## ConsolePort integration (verified)
+
+- The action-bar skin lib is a LibStub library:
+  `LibStub('ConsolePortActionButton')`; per-modifier skins live at
+  `lib.Skin.ClusterBar[mod]` with mods `''`, `'SHIFT-'`, `'CTRL-'`,
+  `'CTRL-SHIFT-'`. Swapping an entry restyles all already-created buttons
+  (`Button:UpdateSkin` re-reads it).
+- Cluster buttons are globally named `CPB_<ID>_<mod>` —
+  e.g. `CPB_PAD1`, `CPB_PAD1_SHIFT`, `CPB_PAD1_CTRL_SHIFT` (`env.MakeID`
+  maps `-`/` ` → `_` and strips a trailing `_`). Scan `_G` for `CPB_`
+  prefixed names + a `.mod` field to find all cluster buttons.
+- Presets applied via `ConsolePort('layout X')` are used RAW — no
+  `BuildLayout`/`UpgradeInterface` pass fills interface defaults. Custom
+  `ClusterHandle` tables must set every field (`type`, `pos`, `size`,
+  `dir`, `showFlyouts`) or `Cluster:SetSize(props.size)` errors.
+- Layout persistence: `env('Layout', …)` writes `ConsolePort_BarLayout`
+  through a registered save callback; `env.Presets` proxies reads/writes
+  to `ConsolePort_BarPresets`. The supported way to swap layouts is the
+  slash handler — `ConsolePort('layout <presetName>')` — which wraps the
+  swap in `env:RunSafe` (combat-safe) and refreshes the Manager.
+- `ConsolePort` global has a `__call` metamethod bound to the slash
+  dispatcher, so `ConsolePort('layout X')` is legal Lua.
+- `SkinUtility.GetIconMask(button)` returns an existing IconMask or
+  creates+attaches one — so overriding then restoring the mask texture is
+  enough to toggle square vs. CP's wedge/round masks.
+- *(Unverified — warcraft.wiki.gg `TextureBase:SetRotation`.)* Rotation
+  transforms the image inside the region's unchanged box and scales it by
+  2^-0.5, so a square rotated 45° is a diamond whose diagonal equals the
+  box side. Pass `CLAMPTOBLACKADDITIVE` wrap modes to `SetTexture` so the
+  area outside the rotated image is transparent.
+- Cluster positions are set by `Cluster:SetPoint` → `ClearAllPoints` +
+  `SetPoint` on the main button `CPB_<ID>`, relative to the cluster bar
+  `ConsolePortBarCluster`; release clears its anchors.
+- ConsolePort_Bar's internal `env` is not reachable from outside; only
+  the lib, the `ConsolePort` callable, and the SavedVariables tables are
+  public surfaces.
+
