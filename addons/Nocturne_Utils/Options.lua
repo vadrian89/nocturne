@@ -5,7 +5,6 @@ function ns:InitOptions()
         function() ns:ApplySettings() end)
     ns.category = s.category
 
-    s:Checkbox("hidePlayer", "Hide player frame", "Hide the Blizzard player unit frame.")
     s:Checkbox("hideTarget", "Hide target frame", "Hide the Blizzard target unit frame.")
     s:Checkbox("hideBags", "Hide bag bar",
         "Hide the backpack and bag slot buttons near the micro menu. Bag windows still open with the keybind.")
@@ -13,8 +12,6 @@ function ns:InitOptions()
         "Hide chat frames during combat while not in a party or raid.")
     s:Checkbox("hideCPCluster", "Hide ConsolePort cluster while sheathed",
         "Fade out the ConsolePort cluster while weapons are sheathed. Always shown in combat.")
-    s:Checkbox("hidePRDWhenIdle", "Personal resources: hide when idle",
-        "Show the personal resource display only in combat, with weapons drawn, or while health/power/class resources are not at their resting state.")
 
     s:Finish()
 end

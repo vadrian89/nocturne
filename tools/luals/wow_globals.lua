@@ -9,7 +9,6 @@
 ---@field LibStub fun(name: string, silent?: boolean): table?
 ---@field IsAddOnLoaded fun(name: string): boolean
 ---@field NamePlateDriverFrame table
----@field PlayerFrame table
 ---@field TargetFrame table
 ---@field GeneralDockManager table
 ---@field ChatFrameMenuButton table
