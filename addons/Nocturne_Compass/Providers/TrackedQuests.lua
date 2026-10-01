@@ -11,7 +11,9 @@ local function QuestAtlas(e, isDaily)
     return _G.Nocturne.QuestAtlas(e.classification, e.isComplete, e.isWorldQuest, isDaily)
 end
 
-local provider = { name = "trackedQuests" }
+-- glowInRegion: only quest objectives light up the compass on arrival;
+-- other providers just show the banner.
+local provider = { name = "trackedQuests", glowInRegion = true }
 ns.providers[#ns.providers + 1] = provider
 
 provider.results = {}

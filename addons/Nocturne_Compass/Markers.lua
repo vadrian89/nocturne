@@ -159,7 +159,7 @@ function ns:UpdateMarkers()
     local db = ns.db
     local p = ns.player
     local pxPerRad = ns.pxPerRad
-    local bannerTitle, bannerDist
+    local bannerTitle, bannerDist, bannerGlow
     -- Flying over a POI on a flight path isn't "arriving": no glow/banner.
     local onTaxi = UnitOnTaxi and UnitOnTaxi("player") or false
     local edgeN = 0
@@ -200,6 +200,7 @@ function ns:UpdateMarkers()
             and (not bannerDist or dist < bannerDist) then
             bannerDist = dist
             bannerTitle = e.title
+            bannerGlow = e.provider.glowInRegion
         end
 
         local t = ns.math.Clamp(dist / db.scaleRange, 0, 1)
@@ -294,10 +295,10 @@ function ns:UpdateMarkers()
         end
     end
 
-    -- In-region banner: steady quest/zone name below the bar + a glow on
-    -- the compass frame while inside.
+    -- In-region banner: steady quest/zone name below the bar; the glow on
+    -- the compass frame only for quest regions.
     local inRegion = bannerTitle ~= nil and bannerTitle ~= ""
-    SetInRegion(inRegion)
+    SetInRegion(inRegion and bannerGlow or false)
     if inRegion then
         if banner._title ~= bannerTitle then
             banner._title = bannerTitle

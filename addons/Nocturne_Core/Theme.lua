@@ -68,10 +68,12 @@ function T.SetGlow(frame, shown)
             g.tex:SetBlendMode("ADD")
             local ag = g:CreateAnimationGroup()
             ag:SetLooping("BOUNCE")
+            -- Slow, eased breathing (2.5s each way) rather than a blink.
             local a = ag:CreateAnimation("Alpha")
             a:SetFromAlpha(0.35)
             a:SetToAlpha(1)
-            a:SetDuration(0.7)
+            a:SetDuration(2.5)
+            a:SetSmoothing("IN_OUT")
             g.pulse = ag
             frame._noctGlow = g
         end
