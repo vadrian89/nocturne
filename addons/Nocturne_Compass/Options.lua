@@ -73,6 +73,11 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
     elseif msg == "reset" then
         ns.db.point = { "CENTER", 0, 300 }
         ns:ApplyLayout()
+    elseif msg == "forget" then
+        wipe(ns.db.pois)
+        wipe(ns.db.taxi)
+        ns.MarkScanDirty(true)
+        Nocturne.Print("Learned POIs cleared.")
     elseif msg == "diag" then
         local p = ns.player
         local db = ns.db
@@ -169,6 +174,9 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
         end
         if p.mapID and ns.OfferDiag then ns.OfferDiag(p.mapID, lines) end
         if p.mapID and ns.PinDiag then ns.PinDiag(p.mapID, p.instance, lines) end
+        lines[#lines + 1] = "interactions=" .. table.concat(ns.seenIT or {}, ",")
+        if ns.LearnedPOIDiag then ns.LearnedPOIDiag(lines) end
+        if ns.WorldMapPinDiag then ns.WorldMapPinDiag(lines) end
         local selected = ns.GetSelectedQuestID()
         local onMap = p.mapID and C_QuestLog.GetQuestsOnMap(p.mapID)
         local objectives = selected and C_QuestLog.GetQuestObjectives(selected)

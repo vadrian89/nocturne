@@ -61,7 +61,7 @@ end
 local function ApplyIcon(m, entry)
     local atlas = entry.atlas
     local layer = entry.isSuperTracked and 2 or entry.isComplete and 1 or 0
-    local sig = tostring(atlas or entry.textureIndex) .. ":" .. layer
+    local sig = tostring(atlas or entry.icon or entry.textureIndex) .. ":" .. layer
     if m._iconSig == sig then return end
     m._iconSig = sig
 
@@ -69,6 +69,9 @@ local function ApplyIcon(m, entry)
     if atlas then
         m.icon:SetTexture("Interface\\Buttons\\WHITE8x8") -- clear any flat color
         m.icon:SetAtlas(atlas)
+    elseif entry.icon then
+        m.icon:SetTexture(entry.icon)
+        m.icon:SetTexCoord(0, 1, 0, 1)
     elseif entry.textureIndex and GetPOITextureCoords then
         m.icon:SetTexture(POI_TEXTURE)
         m.icon:SetTexCoord(GetPOITextureCoords(entry.textureIndex))
@@ -157,6 +160,8 @@ function ns:UpdateMarkers()
     local p = ns.player
     local pxPerRad = ns.pxPerRad
     local bannerTitle, bannerDist
+    -- Flying over a POI on a flight path isn't "arriving": no glow/banner.
+    local onTaxi = UnitOnTaxi and UnitOnTaxi("player") or false
     local edgeN = 0
     wipe(edgeMax[1][-1])
     wipe(edgeMax[1][1])
@@ -191,7 +196,8 @@ function ns:UpdateMarkers()
             m._rotated = false
         end
 
-        if e.provider:IsInRegion(e, dist) and (not bannerDist or dist < bannerDist) then
+        if not onTaxi and e.provider:IsInRegion(e, dist)
+            and (not bannerDist or dist < bannerDist) then
             bannerDist = dist
             bannerTitle = e.title
         end

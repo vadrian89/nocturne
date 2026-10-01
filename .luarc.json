@@ -35,6 +35,12 @@
         "GameFontNormalSmall",
         "GameTooltip",
         "GetPOITextureCoords",
+        "CanMerchantRepair",
+        "GetNumMerchantItems",
+        "GetMerchantItemLink",
+        "C_TooltipInfo",
+        "GetTaxiMapID",
+        "UnitOnTaxi",
         "GetPlayerFacing",
         "GetQuestLogCompletionText",
         "GetQuestObjectiveInfo",
@@ -158,7 +164,17 @@
         "UnitPowerMax",
         "UnitPowerType",
         "C_NamePlate",
-        "UnitExists"
+        "AM_PIN_SCALE_STYLE_VISIBLE_WHEN_ZOOMED_OUT",
+        "CreateFramePool",
+        "MapCanvasDataProviderMixin",
+        "MapCanvasPinMixin",
+        "WorldMapFrame",
+        "strsplit",
+        "UnitExists",
+        "UnitGUID",
+        "UnitName",
+        "wipe",
+        "UiMapPoint"
     ],
     "workspace.library": [
         "tools/luals"

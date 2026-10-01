@@ -160,13 +160,6 @@ local function TrackingInfo(i)
     return info, active
 end
 
--- Tracking-menu categories that MapPins/TrackedQuests can render.
-local TRACKABLE_FILTERS = {}
-for _, name in ipairs({ "QuestPOIs", "TrivialQuests", "Digsites", "TaxiNode" }) do
-    local b = Enum.MinimapTrackingFilter and Enum.MinimapTrackingFilter[name]
-    if b then TRACKABLE_FILTERS[b] = true end
-end
-
 local function AddBlizzardEntries(root)
     local landing = _G.ExpansionLandingPageMinimapButton
     if landing and landing:IsShown() then
@@ -179,19 +172,44 @@ local function AddBlizzardEntries(root)
     end
 
     if C_Minimap and C_Minimap.GetNumTrackingTypes then
-        -- Only the categories the compass can draw markers for; townsfolk,
-        -- gather/creature tracking and the rest stay on the minimap's own
-        -- tracking menu.
-        local tracking
+        -- The full tracking list: learned townsfolk POIs follow these same
+        -- toggles, so every category the client exposes gets an entry.
+        -- Some entries share a display name ("Banker" covers several bank
+        -- filters) — they collapse into one checkbox toggling them all.
+        local tracking, order, byName
         for i = 1, C_Minimap.GetNumTrackingTypes() do
             local name = TrackingInfo(i)
-            local f = C_Minimap.GetTrackingFilter and C_Minimap.GetTrackingFilter(i)
-            if name and f and f.filterID and TRACKABLE_FILTERS[f.filterID] then
-                tracking = tracking or root:CreateButton("Tracking")
-                tracking:CreateCheckbox(name,
-                    function() return select(2, TrackingInfo(i)) and true or false end,
-                    function() C_Minimap.SetTracking(i, not select(2, TrackingInfo(i))) end)
+            if name then
+                order = order or {}
+                byName = byName or {}
+                local group = byName[name]
+                if not group then
+                    group = {}
+                    byName[name] = group
+                    order[#order + 1] = name
+                end
+                group[#group + 1] = i
             end
+        end
+        for _, name in ipairs(order or {}) do
+            local group = byName[name]
+            tracking = tracking or root:CreateButton("Tracking")
+            tracking:CreateCheckbox(name,
+                function()
+                    for _, i in ipairs(group) do
+                        if select(2, TrackingInfo(i)) then return true end
+                    end
+                end,
+                function()
+                    local on = true
+                    for _, i in ipairs(group) do
+                        if select(2, TrackingInfo(i)) then
+                            on = false
+                            break
+                        end
+                    end
+                    for _, i in ipairs(group) do C_Minimap.SetTracking(i, on) end
+                end)
         end
     end
 end

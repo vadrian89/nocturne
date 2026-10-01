@@ -54,6 +54,10 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   assignment) silently truncates to one value — `and`/`or` always collapse
   to a single result even when the right operand returns multiple. Guard
   with an `if`, don't rely on `and` to short-circuit a multi-return call.
+- A bare `return` (or falling off the end) returns NO values, not `nil`:
+  `tostring(f())` then errors "bad argument #1 to 'tostring' (value
+  expected)". Helpers whose result goes straight into a call should end
+  with an explicit `return nil`.
 
 ## Midnight (12.0) API quirks
 
@@ -74,6 +78,18 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   suppressed, even across a reload). Degrading the glow to pin distance while the minimap is
   away has to be done explicitly (`ns.MinimapShown()` gate in
   `TrackedQuests.lua`).
+- `C_PlayerInteractionManager.IsValidNPCInteraction(Binder)` and
+  `IsInteractingWithNpcOfType(Binder)` both return false while an
+  innkeeper's shop (Merchant) is open — they describe the interaction in
+  progress, not what the NPC can do. They can't classify an NPC; the
+  `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` type already says the same.
+- `C_TooltipInfo.GetUnit("npc").lines[i].leftText` holds an NPC's
+  subtitle WITHOUT the angle brackets shown on screen: Innkeeper Grosk
+  reads `Innkeeper Grosk | Innkeeper | Level 9 | Orgrimmar | PvP`. The
+  subtitle matches the tracking menu's filter name (`Innkeeper`).
+- Choosing an innkeeper's "Make this inn your home" gossip option fires
+  `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` with `Binder` as soon as the
+  confirmation popup opens — even if the player then clicks Cancel.
 - *(Unverified — read from Blizzard's UI source, not yet proven in-game.)*
   The native Settings vertical layout has no free-text row: element
   initializers create their frames through the ScrollBox factory, which

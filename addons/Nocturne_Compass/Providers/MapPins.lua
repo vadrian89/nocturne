@@ -28,11 +28,27 @@ local function FindAreaPOI(mapID, poiID)
     end
 end
 
+-- LearnedPOIs records the real spot when the player opens a flight map;
+-- it wins over the icon position, which can sit tens of yards off.
 local function FindTaxiNode(mapID, nodeID)
+    local learned = ns.db and ns.db.taxi and ns.db.taxi[nodeID]
     for _, node in ipairs(C_TaxiMap.GetTaxiNodesForMap(mapID) or {}) do
-        if node.nodeID == nodeID and node.position then
-            return { pos = node.position, name = node.name, atlas = node.atlasName }
+        if node.nodeID == nodeID then
+            if learned then
+                return {
+                    pos = { x = learned.x, y = learned.y },
+                    mapOverride = learned.m,
+                    name = node.name or learned.n,
+                    atlas = node.atlasName
+                }
+            end
+            if node.position then
+                return { pos = node.position, name = node.name, atlas = node.atlasName }
+            end
         end
+    end
+    if learned then
+        return { pos = { x = learned.x, y = learned.y }, mapOverride = learned.m, name = learned.n }
     end
 end
 
@@ -107,8 +123,8 @@ local missedAt = {}
 local function Try(find, id, key, mapID)
     local hit = mapID and find(mapID, id)
     if hit then
-        hit.mapID = mapID
-        foundOn[key] = mapID
+        hit.mapID = hit.mapOverride or mapID
+        foundOn[key] = hit.mapID
         return hit
     end
 end
@@ -172,9 +188,14 @@ function provider:Scan(playerMapID, playerInstance)
 
     local wp = C_Map.GetUserWaypoint()
     local tracked = wp and C_SuperTrack.IsSuperTrackingUserWaypoint() or false
-    if wp and wp.position and not (tracked and transitX) then
+    -- A waypoint placed on a learned POI (LearnedPOIs) stands in for the
+    -- POI's own marker only while super-tracked; untracked, the POI's
+    -- marker is the one drawn.
+    local learnedTitle = ns.LearnedWaypointTitle and ns.LearnedWaypointTitle(wp)
+    if wp and wp.position and not (tracked and transitX) and (tracked or not learnedTitle) then
         self:Add(results, playerInstance, wp.uiMapID, wp.position, {
             key = "pin:user",
+            title = learnedTitle,
             atlas = tracked and PIN_TRACKED or PIN_UNTRACKED,
             isSuperTracked = tracked,
         })
@@ -262,13 +283,20 @@ function provider:Scan(playerMapID, playerInstance)
     if FILTER.TaxiNode and C_TaxiMap and ns.TrackingFilterActive(FILTER.TaxiNode) then
         for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
             for _, node in ipairs(C_TaxiMap.GetTaxiNodesForMap(mapID) or {}) do
-                if node.position and TaxiForPlayer(node) and not (kind == "taxi" and node.nodeID == id)
+                -- The learned spot replaces the icon's position only; zone
+                -- membership still comes from where the icon sits, or a
+                -- visited node could leak in from another zone.
+                local learned = ns.db and ns.db.taxi and ns.db.taxi[node.nodeID]
+                if node.position and TaxiForPlayer(node)
+                    and not (kind == "taxi" and node.nodeID == id)
                     and ns.OnMap(mapID, node.position.x, node.position.y) then
-                    self:Add(results, playerInstance, mapID, node.position, {
-                        key = "pin:taxi:" .. node.nodeID,
-                        title = node.name,
-                        atlas = node.atlasName,
-                    })
+                    self:Add(results, playerInstance,
+                        learned and learned.m or mapID,
+                        learned and { x = learned.x, y = learned.y } or node.position, {
+                            key = "pin:taxi:" .. node.nodeID,
+                            title = node.name,
+                            atlas = node.atlasName,
+                        })
                 end
             end
         end
