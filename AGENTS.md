@@ -12,6 +12,9 @@ no Ace libraries, no HereBeDragons. Only Blizzard APIs.
 - Allowed globals: `_G.Nocturne` (shared namespace), `Nocturne<Feature>DB`
   (SavedVariables), `Nocturne<Feature>_<name>` only for functions the client
   resolves by name (e.g. `AddonCompartmentFunc`).
+- Exception: `GetMinimapShape` (community convention other addons resolve
+  by name to clamp minimap buttons/pins) — defined by Compass's own square
+  minimap only if no other addon already did.
 - Frame names: `Nocturne<Feature><Role>` (e.g. `NocturneCompassFrame`).
 - Everything else is `local` or lives in the private namespace:
   `local _, ns = ...` (or `local ADDON_NAME, ns = ...`).

@@ -48,6 +48,8 @@ function ns:InitOptions()
     s:Slider("zoneSize", "Zone text size", "Font size of the clock, zone name and coordinates above the bar.", 8, 24, 1)
     s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
+    s:Slider("minimapSize", "Minimap size",
+        "Side of the square minimap in the top-right corner, in pixels.", 120, 320, 10)
 
     s:Finish()
 end

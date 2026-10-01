@@ -31,6 +31,7 @@ ns.defaults = {
     bannerSize    = 16,
     hideInCombat  = false,
     opacity       = 1.0,
+    minimapSize   = 180,
     -- Learned POIs (NPCs the player interacted with) and real flight-master
     -- spots recorded on TAXIMAP_OPENED, both keyed per map/node.
     pois          = {},

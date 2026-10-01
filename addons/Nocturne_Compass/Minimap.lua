@@ -128,7 +128,12 @@ local function WantHidden()
     return false
 end
 
-local minimap = Nocturne.NewSuppressor(function() return _G.MinimapCluster end, WantHidden)
+-- The display modes act on the own container (MinimapFrame.lua); with it in
+-- place Blizzard's cluster (header, buttons, ring) is hidden for good.
+-- Without it (Minimap missing) they fall back to the cluster.
+local minimap = Nocturne.NewSuppressor(function() return ns.minimapFrame or _G.MinimapCluster end, WantHidden)
+local cluster = Nocturne.NewSuppressor(function() return ns.minimapFrame and _G.MinimapCluster end,
+    function() return true end)
 
 -- Texture from the first atlas the client has, else a plain icon file.
 local function SetIcon(tex, file, ...)
@@ -283,10 +288,12 @@ end
 
 local function Layout()
     if not launcher then return end
-    -- The menu button is always part of the bar; the moved minimap
-    -- indicators only matter while the real minimap is suppressed.
+    -- The menu button is always part of the bar. Blizzard's mail/crafting
+    -- indicators live on the (always hidden) cluster once the own container
+    -- is up, so ours show whenever the bar does; else only while the
+    -- minimap is suppressed.
     launcher:SetShown(ns.barVisible or false)
-    local suppressed = ns.barVisible and WantHidden()
+    local suppressed = ns.barVisible and (ns.minimapFrame ~= nil or WantHidden())
     local prev = launcher
     for _, b in ipairs(indicators) do
         local on = suppressed and b.count() > 0
@@ -307,6 +314,7 @@ local function PersonalOrders()
 end
 
 function ns:InitMinimapButtons()
+    ns:InitMinimapFrame()
     launcher = CreateButton(ns.frame, function(tip)
         tip:AddLine("Minimap menu")
         tip:AddLine("Expansion summary, calendar, tracking and addon buttons.", 1, 1, 1, true)
@@ -350,6 +358,8 @@ end
 -- Called from ApplyLayout and whenever the bar shows/hides.
 function ns:ApplyMinimap()
     RefreshSmart()
+    ns:ApplyMinimapFrame()
+    cluster.Sync()
     minimap.Sync()
     Layout()
 end

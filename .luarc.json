@@ -179,7 +179,12 @@
         "C_CreatureInfo",
         "LOCALIZED_CLASS_NAMES_MALE",
         "LOCALIZED_CLASS_NAMES_FEMALE",
-        "UnitClass"
+        "UnitClass",
+        "Minimap",
+        "MinimapCluster",
+        "GetCVar",
+        "SetCVar",
+        "hooksecurefunc"
     ],
     "workspace.library": [
         "tools/luals"

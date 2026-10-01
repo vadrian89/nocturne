@@ -18,6 +18,7 @@ Providers\TrackedQuests.lua
 Providers\MapPins.lua
 Providers\LearnedPOIs.lua
 Clock.lua
+MinimapFrame.lua
 Minimap.lua
 Compass.lua
 Markers.lua
