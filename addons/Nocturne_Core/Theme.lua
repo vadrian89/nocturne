@@ -52,8 +52,48 @@ function T.CreateFontString(parent, size, color, drawLayer, flags)
     return fs
 end
 
+-- Rounded rectangle from non-overlapping pieces (so the additive alpha stays
+-- even): a full-height center strip, two side strips and four corner
+-- quarter-discs cut from Blizzard's circular portrait mask.
+local GLOW_RADIUS = 10
+local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+
+local function GlowPiece(g, c, file)
+    local t = g:CreateTexture(nil, "OVERLAY")
+    if file then
+        t:SetTexture(file)
+        t:SetVertexColor(c[1], c[2], c[3], 0.35)
+    else
+        t:SetColorTexture(c[1], c[2], c[3], 0.35)
+    end
+    t:SetBlendMode("ADD")
+    return t
+end
+
+local function BuildRoundedGlow(g, c, r)
+    local center = GlowPiece(g, c)
+    center:SetPoint("TOPLEFT", r, 0)
+    center:SetPoint("BOTTOMRIGHT", -r, 0)
+    for _, side in ipairs({ "LEFT", "RIGHT" }) do
+        local s = GlowPiece(g, c)
+        s:SetWidth(r)
+        s:SetPoint("TOP" .. side, 0, -r)
+        s:SetPoint("BOTTOM" .. side, 0, r)
+    end
+    -- point, x/y offsets, texcoords of that quarter of the disc
+    for _, q in ipairs({
+        { "TOPLEFT", 0, 0.5, 0, 0.5 }, { "TOPRIGHT", 0.5, 1, 0, 0.5 },
+        { "BOTTOMLEFT", 0, 0.5, 0.5, 1 }, { "BOTTOMRIGHT", 0.5, 1, 0.5, 1 },
+    }) do
+        local corner = GlowPiece(g, c, CIRCLE)
+        corner:SetSize(r, r)
+        corner:SetPoint(q[1])
+        corner:SetTexCoord(q[2], q[3], q[4], q[5])
+    end
+end
+
 -- Frame glow for "something active" states (e.g. inside a quest region):
--- a pulsing additive accent rect over the frame.
+-- a pulsing additive accent rounded rect over the frame.
 function T.SetGlow(frame, shown)
     local g = frame._noctGlow
     if shown then
@@ -61,11 +101,7 @@ function T.SetGlow(frame, shown)
             g = CreateFrame("Frame", nil, frame)
             g:SetPoint("TOPLEFT", -6, 6)
             g:SetPoint("BOTTOMRIGHT", 6, -6)
-            local c = T.colors.accent
-            g.tex = g:CreateTexture(nil, "OVERLAY")
-            g.tex:SetAllPoints()
-            g.tex:SetColorTexture(c[1], c[2], c[3], 0.35)
-            g.tex:SetBlendMode("ADD")
+            BuildRoundedGlow(g, T.colors.accent, GLOW_RADIUS)
             local ag = g:CreateAnimationGroup()
             ag:SetLooping("BOUNCE")
             -- Slow, eased breathing (2.5s each way) rather than a blink.
