@@ -12,19 +12,23 @@ local BACKUP_NAME = 'Backup (pre-Nocturne)'
 
 -- Geometry (cluster-bar units). The cluster bar is widened to the screen
 -- width so its LEFT/RIGHT edges sit at the screen edges; each ring keeps
--- the stock cross shape (64px buttons, +-65 horizontally, +-42 vertically)
--- pinned to its side: dpad ring anchored LEFT, face ring anchored RIGHT.
-local EDGE        = 16                 -- screen edge to a ring's outermost button edge
-local HALF        = 32                 -- button half-size
-local OFFX, OFFY  = 65, 42
-local RING_INSET  = EDGE + HALF + OFFX -- ring center from the screen edge
+-- the stock cross shape (64px buttons) pinned to its side: dpad ring
+-- anchored LEFT, face ring anchored RIGHT. In a cross, neighboring
+-- buttons sit diagonal to each other; the visible round art is smaller
+-- than the 64px frame, so to get the rims ~2px apart the centers go to
+-- ~66px on the diagonal -> offset s = 66/sqrt(2) ~ 47. Frame corners
+-- overlap (~19px); harmless for gamepad input.
+local EDGE        = 16                  -- screen edge to a ring's outermost button edge
+local HALF        = 32                  -- button half-size
+local D_OFF       = 47                  -- both rings: round art ~2px apart
+local RING_INSET  = EDGE + HALF + D_OFF -- ring centers from the screen edges
 local RING_Y      = 42
-local SH_X        = 75                 -- shoulders/triggers: diagonal corners of the
-local SH_UP       = 82                 -- face ring (LB/RB up, LT/RT down)
+local SH_X        = 75                  -- shoulders/triggers: diagonal corners of the
+local SH_UP       = 82                  -- face ring (LB/RB up, LT/RT down)
 local SH_DOWN     = 70
 ns.PRESET_NAME    = PRESET_NAME
 -- Bump when the geometry changes: Init re-applies the preset once.
-ns.LAYOUT_VERSION = 6
+ns.LAYOUT_VERSION = 10
 
 local function Handle(x, y, dir, side)
     return {
@@ -41,14 +45,14 @@ end
 local function CompactChildren()
     local lx, rx, y = RING_INSET, -RING_INSET, RING_Y
     return {
-        PADDUP       = Handle(lx, y + OFFY, 'UP', 'LEFT'),
-        PADDDOWN     = Handle(lx, y - OFFY, 'DOWN', 'LEFT'),
-        PADDLEFT     = Handle(lx - OFFX, y, 'LEFT', 'LEFT'),
-        PADDRIGHT    = Handle(lx + OFFX, y, 'RIGHT', 'LEFT'),
-        PAD4         = Handle(rx, y + OFFY, 'UP', 'RIGHT'),
-        PAD1         = Handle(rx, y - OFFY, 'DOWN', 'RIGHT'),
-        PAD3         = Handle(rx - OFFX, y, 'LEFT', 'RIGHT'),
-        PAD2         = Handle(rx + OFFX, y, 'RIGHT', 'RIGHT'),
+        PADDUP       = Handle(lx, y + D_OFF, 'UP', 'LEFT'),
+        PADDDOWN     = Handle(lx, y - D_OFF, 'DOWN', 'LEFT'),
+        PADDLEFT     = Handle(lx - D_OFF, y, 'LEFT', 'LEFT'),
+        PADDRIGHT    = Handle(lx + D_OFF, y, 'RIGHT', 'LEFT'),
+        PAD4         = Handle(rx, y + D_OFF, 'UP', 'RIGHT'),
+        PAD1         = Handle(rx, y - D_OFF, 'DOWN', 'RIGHT'),
+        PAD3         = Handle(rx - D_OFF, y, 'LEFT', 'RIGHT'),
+        PAD2         = Handle(rx + D_OFF, y, 'RIGHT', 'RIGHT'),
         PADLSHOULDER = Handle(rx - SH_X, y + SH_UP, 'UP', 'RIGHT'),
         PADRSHOULDER = Handle(rx + SH_X, y + SH_UP, 'UP', 'RIGHT'),
         PADLTRIGGER  = Handle(rx - SH_X, y - SH_DOWN, 'DOWN', 'RIGHT'),
@@ -70,7 +74,7 @@ function ns:IsLayoutLive()
     if not b then return false end
     local _, _, rpt, x, y = b:GetPoint(1)
     return rpt == 'RIGHT' and x ~= nil
-        and math.abs(x + RING_INSET) < 0.5 and math.abs(y - (RING_Y + OFFY)) < 0.5
+        and math.abs(x + RING_INSET) < 0.5 and math.abs(y - (RING_Y + D_OFF)) < 0.5
 end
 
 local function BaseLayout()
