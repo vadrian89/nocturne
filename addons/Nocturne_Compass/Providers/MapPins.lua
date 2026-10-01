@@ -156,7 +156,9 @@ function provider:Add(results, instance, mapID, pos, entry)
     if not x then return end
     entry.atlas = ns.FirstAtlas(entry.atlas)
     if entry.atlas or not GetPOITextureCoords then entry.textureIndex = nil end
-    if not entry.atlas and not entry.textureIndex then entry.atlas = ns.FirstAtlas(PIN_TRACKED) end
+    if not entry.atlas and not entry.textureIndex and not entry.icon then
+        entry.atlas = ns.FirstAtlas(PIN_TRACKED)
+    end
     entry.provider, entry.x, entry.y = self, x, y
     entry.title = entry.title or PIN_TITLE
     results[#results + 1] = entry
@@ -191,12 +193,16 @@ function provider:Scan(playerMapID, playerInstance)
     -- A waypoint placed on a learned POI (LearnedPOIs) stands in for the
     -- POI's own marker only while super-tracked; untracked, the POI's
     -- marker is the one drawn.
-    local learnedTitle = ns.LearnedWaypointTitle and ns.LearnedWaypointTitle(wp)
+    local learnedTitle, learnedIcon, learnedAtlas
+    if wp and ns.LearnedWaypointInfo then
+        learnedTitle, learnedIcon, learnedAtlas = ns.LearnedWaypointInfo(wp)
+    end
     if wp and wp.position and not (tracked and transitX) and (tracked or not learnedTitle) then
         self:Add(results, playerInstance, wp.uiMapID, wp.position, {
             key = "pin:user",
             title = learnedTitle,
-            atlas = tracked and PIN_TRACKED or PIN_UNTRACKED,
+            icon = learnedIcon,
+            atlas = learnedAtlas or (not learnedIcon and (tracked and PIN_TRACKED or PIN_UNTRACKED)) or nil,
             isSuperTracked = tracked,
         })
     end

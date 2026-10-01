@@ -420,15 +420,26 @@ end
 -- Whether a POI is drawn (compass and world map), plus its icon: a fileID
 -- (tracking filter icon) or an atlas. Class trainers have no tracking
 -- filter; they show only for the player's own class.
+-- Icon (fileID) or atlas for a POI. `bit` is the active filter when known;
+-- otherwise the POI's own/first filter, so a destination keeps its icon
+-- even with tracking off.
+local function PoiIcon(poi, bit)
+    if poi.c then
+        local lower = poi.c:lower()
+        return nil, ns.FirstAtlas("classicon-" .. lower, "groupfinder-icon-class-" .. lower)
+    end
+    local kind = KIND[poi.t]
+    return FilterIcon(bit or poi.v or (kind and kind.bits[1])), nil
+end
+
 local function PoiShown(poi)
     if poi.c then
         if poi.c ~= select(2, UnitClass("player")) then return false end
-        local lower = poi.c:lower()
-        return true, nil, ns.FirstAtlas("classicon-" .. lower, "groupfinder-icon-class-" .. lower)
+        return true, PoiIcon(poi)
     end
     local bit = PoiBit(poi)
     if not bit then return false end
-    return true, FilterIcon(bit), nil
+    return true, PoiIcon(poi, bit)
 end
 
 -- A waypoint read back from the client can drift in the last float digits.
@@ -448,11 +459,13 @@ local function PoiAtWaypoint(wp)
     end
 end
 
--- MapPins titles the user waypoint marker with the POI's name.
-function ns.LearnedWaypointTitle(wp)
+-- MapPins draws the user waypoint marker with the POI's name and icon
+-- (title, icon fileID, atlas); nil when the waypoint isn't on a POI.
+function ns.LearnedWaypointInfo(wp)
     Migrate()
     local poi = PoiAtWaypoint(wp)
-    return poi and PoiTitle(poi)
+    if not poi then return nil end
+    return PoiTitle(poi), PoiIcon(poi)
 end
 
 function provider:Scan(playerMapID, playerInstance)
