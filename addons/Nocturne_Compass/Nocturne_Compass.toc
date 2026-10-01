@@ -22,4 +22,5 @@ MinimapFrame.lua
 Minimap.lua
 Compass.lua
 Markers.lua
+AutoTrack.lua
 Options.lua

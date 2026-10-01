@@ -34,6 +34,12 @@ function ns:InitOptions()
     s:Checkbox("showHeading", "Show coordinates", "Player map coordinates above the bar, e.g. 45.2, 67.8.")
     s:Checkbox("showDistance", "Show marker distance", "Yards to each tracked quest under its marker.")
     s:Checkbox("hideInCombat", "Hide in combat", "Fade the bar out while in combat.")
+    s:Checkbox("autoSuperTrack", "Auto-select quests",
+        "With nothing selected, select a quest from the objective tracker once you're within the " ..
+        "Auto-select radius of it (or inside its area, while the minimap is shown). When the " ..
+        "selected quest's objectives are done, move on to another unfinished tracked quest in " ..
+        "range; with none, it stays selected and leads to the turn-in. Never replaces anything " ..
+        "you selected yourself; off on flight paths and in instances.")
 
     s:Slider("width", "Bar width", "Length of the compass strip in pixels.", 200, 900, 10)
     s:Slider("height", "Bar height", nil, 16, 64, 2)
@@ -45,6 +51,8 @@ function ns:InitOptions()
     s:Slider("maxScale", "Marker max scale", "Size of nearby markers.", 1, 3, 0.05)
     s:Slider("inRegionYards", "Area radius (yards)",
         "Distance to a quest objective that counts as 'inside' its region.", 10, 200, 5)
+    s:Slider("autoTrackYards", "Auto-select radius (yards)",
+        "Distance to a tracked quest's pin at which it gets selected automatically.", 20, 200, 5)
     s:Slider("zoneSize", "Zone text size", "Font size of the clock, zone name and coordinates above the bar.", 8, 24, 1)
     s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)

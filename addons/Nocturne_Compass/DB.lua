@@ -32,6 +32,8 @@ ns.defaults = {
     hideInCombat  = false,
     opacity       = 1.0,
     minimapSize   = 180,
+    autoSuperTrack = true,
+    autoTrackYards = 70,
     -- Learned POIs (NPCs the player interacted with) and real flight-master
     -- spots recorded on TAXIMAP_OPENED, both keyed per map/node.
     pois          = {},
