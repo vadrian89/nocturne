@@ -49,7 +49,7 @@ function ns:InitOptions()
     s:Slider("bannerSize", "Area title size",
         "Font size of the quest/area name shown below the bar while inside its region.", 10, 32, 1)
     s:Slider("minimapSize", "Minimap size",
-        "Side of the square minimap in the top-right corner, in pixels.", 120, 320, 10)
+        "Diameter of the round minimap in the top-right corner, in pixels (the ring scales with it).", 120, 320, 10)
 
     s:Finish()
 end
