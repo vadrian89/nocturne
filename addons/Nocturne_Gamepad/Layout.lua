@@ -26,17 +26,18 @@ local RING_Y      = 42
 local SH_X        = 75                  -- shoulders/triggers: diagonal corners of the
 local SH_UP       = 82                  -- face ring (LB/RB up, LT/RT down)
 local SH_DOWN     = 70
+local SH_SIZE     = 48                  -- shoulders/triggers: smaller than ring buttons
 ns.PRESET_NAME    = PRESET_NAME
 -- Bump when the geometry changes: Init re-applies the preset once.
-ns.LAYOUT_VERSION = 10
+ns.LAYOUT_VERSION = 11
 
-local function Handle(x, y, dir, side)
+local function Handle(x, y, dir, side, size)
     return {
         type = 'ClusterHandle',
         pos = { point = side, relPoint = side, x = x, y = y },
         -- The /cp layout path applies our raw table without BuildLayout's
         -- default filling, so every interface field must be set here.
-        size = 64,
+        size = size or 64,
         dir = dir,
         showFlyouts = true,
     }
@@ -53,10 +54,10 @@ local function CompactChildren()
         PAD1         = Handle(rx, y - D_OFF, 'DOWN', 'RIGHT'),
         PAD3         = Handle(rx - D_OFF, y, 'LEFT', 'RIGHT'),
         PAD2         = Handle(rx + D_OFF, y, 'RIGHT', 'RIGHT'),
-        PADLSHOULDER = Handle(rx - SH_X, y + SH_UP, 'UP', 'RIGHT'),
-        PADRSHOULDER = Handle(rx + SH_X, y + SH_UP, 'UP', 'RIGHT'),
-        PADLTRIGGER  = Handle(rx - SH_X, y - SH_DOWN, 'DOWN', 'RIGHT'),
-        PADRTRIGGER  = Handle(rx + SH_X, y - SH_DOWN, 'DOWN', 'RIGHT'),
+        PADLSHOULDER = Handle(rx - SH_X, y + SH_UP, 'UP', 'RIGHT', SH_SIZE),
+        PADRSHOULDER = Handle(rx + SH_X, y + SH_UP, 'UP', 'RIGHT', SH_SIZE),
+        PADLTRIGGER  = Handle(rx - SH_X, y - SH_DOWN, 'DOWN', 'RIGHT', SH_SIZE),
+        PADRTRIGGER  = Handle(rx + SH_X, y - SH_DOWN, 'DOWN', 'RIGHT', SH_SIZE),
     }
 end
 
