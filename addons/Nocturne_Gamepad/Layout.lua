@@ -1,32 +1,35 @@
-local _, ns          = ...
+local _, ns       = ...
 
 -- ConsolePort applies named layouts through its own preset system:
 -- ConsolePort_BarPresets is the user-preset saved var (proxied into
 -- env.Presets), and ConsolePort('layout <name>') runs the same code path as
 -- /cp layout — ReleaseAll + env('Layout', preset) + OnLayoutChanged, deferred
 -- out of combat by CP's RunSafe.
-local PRESET_KEY     = 'NocturneCompact'
-local PRESET_NAME    = 'Nocturne Compact'
-local BACKUP_KEY     = 'NocturneBackup'
-local BACKUP_NAME    = 'Backup (pre-Nocturne)'
+local PRESET_KEY  = 'NocturneCompact'
+local PRESET_NAME = 'Nocturne Compact'
+local BACKUP_KEY  = 'NocturneBackup'
+local BACKUP_NAME = 'Backup (pre-Nocturne)'
 
--- Geometry (cluster-bar units, offsets from the bar's CENTER). Stock look:
--- 64px buttons in a cross per ring, in-ring offsets +-65 horizontally and
--- +-42 vertically. RING_X puts the innermost buttons (PADDRIGHT and PAD3)
--- 2px apart: (RING_X - OFFX) - (-RING_X + OFFX) - 64 = 2.
-local RING_X, RING_Y = 98, 42
-local OFFX, OFFY     = 65, 42
-local SH_X           = 80 -- shoulders/triggers: diagonal corners of the
-local SH_UP          = 82 -- face ring (LB/RB up, LT/RT down)
-local SH_DOWN        = 70
-ns.PRESET_NAME       = PRESET_NAME
+-- Geometry (cluster-bar units). The cluster bar is widened to the screen
+-- width so its LEFT/RIGHT edges sit at the screen edges; each ring keeps
+-- the stock cross shape (64px buttons, +-65 horizontally, +-42 vertically)
+-- pinned to its side: dpad ring anchored LEFT, face ring anchored RIGHT.
+local EDGE        = 16                 -- screen edge to a ring's outermost button edge
+local HALF        = 32                 -- button half-size
+local OFFX, OFFY  = 65, 42
+local RING_INSET  = EDGE + HALF + OFFX -- ring center from the screen edge
+local RING_Y      = 42
+local SH_X        = 75                 -- shoulders/triggers: diagonal corners of the
+local SH_UP       = 82                 -- face ring (LB/RB up, LT/RT down)
+local SH_DOWN     = 70
+ns.PRESET_NAME    = PRESET_NAME
 -- Bump when the geometry changes: Init re-applies the preset once.
-ns.LAYOUT_VERSION    = 5
+ns.LAYOUT_VERSION = 6
 
-local function Handle(x, y, dir)
+local function Handle(x, y, dir, side)
     return {
         type = 'ClusterHandle',
-        pos = { point = 'CENTER', relPoint = 'CENTER', x = x, y = y },
+        pos = { point = side, relPoint = side, x = x, y = y },
         -- The /cp layout path applies our raw table without BuildLayout's
         -- default filling, so every interface field must be set here.
         size = 64,
@@ -35,26 +38,22 @@ local function Handle(x, y, dir)
     }
 end
 
-local function Ring(cx, cy, up, down, left, right)
-    return {
-        [up]    = Handle(cx, cy + OFFY, 'UP'),
-        [down]  = Handle(cx, cy - OFFY, 'DOWN'),
-        [left]  = Handle(cx - OFFX, cy, 'LEFT'),
-        [right] = Handle(cx + OFFX, cy, 'RIGHT'),
-    }
-end
-
 local function CompactChildren()
-    local children = Ring(-RING_X, RING_Y, 'PADDUP', 'PADDDOWN', 'PADDLEFT', 'PADDRIGHT')
-    local face = Ring(RING_X, RING_Y, 'PAD4', 'PAD1', 'PAD3', 'PAD2')
-    for id, handle in pairs(face) do
-        children[id] = handle
-    end
-    children.PADLSHOULDER = Handle(RING_X - SH_X, RING_Y + SH_UP, 'UP')
-    children.PADRSHOULDER = Handle(RING_X + SH_X, RING_Y + SH_UP, 'UP')
-    children.PADLTRIGGER  = Handle(RING_X - SH_X, RING_Y - SH_DOWN, 'DOWN')
-    children.PADRTRIGGER  = Handle(RING_X + SH_X, RING_Y - SH_DOWN, 'DOWN')
-    return children
+    local lx, rx, y = RING_INSET, -RING_INSET, RING_Y
+    return {
+        PADDUP       = Handle(lx, y + OFFY, 'UP', 'LEFT'),
+        PADDDOWN     = Handle(lx, y - OFFY, 'DOWN', 'LEFT'),
+        PADDLEFT     = Handle(lx - OFFX, y, 'LEFT', 'LEFT'),
+        PADDRIGHT    = Handle(lx + OFFX, y, 'RIGHT', 'LEFT'),
+        PAD4         = Handle(rx, y + OFFY, 'UP', 'RIGHT'),
+        PAD1         = Handle(rx, y - OFFY, 'DOWN', 'RIGHT'),
+        PAD3         = Handle(rx - OFFX, y, 'LEFT', 'RIGHT'),
+        PAD2         = Handle(rx + OFFX, y, 'RIGHT', 'RIGHT'),
+        PADLSHOULDER = Handle(rx - SH_X, y + SH_UP, 'UP', 'RIGHT'),
+        PADRSHOULDER = Handle(rx + SH_X, y + SH_UP, 'UP', 'RIGHT'),
+        PADLTRIGGER  = Handle(rx - SH_X, y - SH_DOWN, 'DOWN', 'RIGHT'),
+        PADRTRIGGER  = Handle(rx + SH_X, y - SH_DOWN, 'DOWN', 'RIGHT'),
+    }
 end
 
 -- env.Layout is built (and env.Presets proxied) in ConsolePort_Bar's deferred
@@ -69,8 +68,9 @@ end
 function ns:IsLayoutLive()
     local b = _G.CPB_PAD4
     if not b then return false end
-    local _, _, _, x, y = b:GetPoint(1)
-    return x ~= nil and math.abs(x - RING_X) < 0.5 and math.abs(y - (RING_Y + OFFY)) < 0.5
+    local _, _, rpt, x, y = b:GetPoint(1)
+    return rpt == 'RIGHT' and x ~= nil
+        and math.abs(x + RING_INSET) < 0.5 and math.abs(y - (RING_Y + OFFY)) < 0.5
 end
 
 local function BaseLayout()
@@ -101,7 +101,7 @@ local DEFAULT_CLUSTER = {
 function ns:BuildPreset()
     local preset = BaseLayout()
     preset.name = PRESET_NAME
-    preset.desc = 'Compact rings: 2px between dpad and face buttons (Nocturne: Gamepad).'
+    preset.desc = 'Rings pinned to the screen edges (Nocturne: Gamepad).'
     preset.visibility = preset.visibility or '[petbattle] hide; show'
     preset.children = preset.children or {}
     local cluster = preset.children.Cluster
@@ -109,6 +109,10 @@ function ns:BuildPreset()
         cluster = CopyTable(DEFAULT_CLUSTER)
         preset.children.Cluster = cluster
     end
+    -- Bar units are scaled by rescale ('90' -> 0.9): widen the bar so its
+    -- LEFT/RIGHT edges coincide with the screen edges.
+    local scale = (tonumber(cluster.rescale) or 100) / 100
+    cluster.width = math.floor(UIParent:GetWidth() / scale + 0.5)
     cluster.children = CompactChildren()
     return preset
 end

@@ -13,8 +13,8 @@ function ns:InitOptions()
         function() ns:ApplySettings() end)
     ns.category = s.category
 
-    s:Checkbox("compactLayout", "Compact cluster layout",
-        "Apply the 'Nocturne Compact' cluster layout: the dpad and X/Y/A/B rings moved together (2px between the innermost buttons), with LB/RB at the top corners and LT/RT at the bottom corners. Stock ConsolePort art is kept.")
+    s:Checkbox("compactLayout", "Edge-anchored cluster layout",
+        "Apply the 'Nocturne Compact' cluster layout: the dpad ring pinned to the left screen edge, the X/Y/A/B ring to the right edge, with LB/RB at the top corners and LT/RT at the bottom corners. Stock ConsolePort art is kept.")
     s:Text(
         "The layout is applied through ConsolePort's own preset system and appears as 'Nocturne Compact' in the loadout presets. Your previous layout is saved as 'Backup (pre-Nocturne)'. Revert with /ngp reset.")
     s:Button("Apply compact layout now", "Apply", ApplyNow)
