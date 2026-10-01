@@ -182,12 +182,46 @@ local SUBTITLE_SKIP = { [F.TaxiNode or -1] = true }
 -- C_TooltipInfo carries it WITHOUT the "<>" drawn on screen (proven:
 -- "Innkeeper Grosk | Innkeeper | Level 9 | ..."), so a whole line equal to
 -- a tracking name is the match; line 1 is the NPC's own name.
--- Third result: the raw tooltip lines, for the diag.
+-- Localized class names (both genders) -> classFile, longest first so
+-- "Demon Hunter" wins over "Hunter". Class trainers carry no tracking
+-- name; their subtitle ("Warrior Trainer") names the class instead.
+local classNames
+local function ClassNames()
+    if classNames then return classNames end
+    classNames = {}
+    local function add(name, file)
+        if type(name) == "string" and name ~= "" then
+            classNames[#classNames + 1] = { name = name:lower(), file = file }
+        end
+    end
+    for i = 1, (GetNumClasses and GetNumClasses() or 0) do
+        local info = C_CreatureInfo and C_CreatureInfo.GetClassInfo(i)
+        local file = info and info.classFile
+        if file then
+            add(info.className, file)
+            add(LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[file], file)
+            add(LOCALIZED_CLASS_NAMES_FEMALE and LOCALIZED_CLASS_NAMES_FEMALE[file], file)
+        end
+    end
+    table.sort(classNames, function(a, b) return #a.name > #b.name end)
+    return classNames
+end
+
+local function ClassInSubtitle(text)
+    local lower = text:lower()
+    for _, c in ipairs(ClassNames()) do
+        if lower:find(c.name, 1, true) then return c.file end
+    end
+    return nil
+end
+
+-- Results: tracking bit, subtitle text, raw tooltip lines (diag), and the
+-- classFile when the subtitle (line 2) names a class instead.
 local function SubtitleBit()
     if not (LoadTracking() and C_TooltipInfo and C_TooltipInfo.GetUnit) then return end
     local tip = C_TooltipInfo.GetUnit("npc")
     if not (tip and tip.lines) then return nil, nil, "no tooltip" end
-    local raw, bit, sub = {}, nil, nil
+    local raw, bit, sub, class = {}, nil, nil, nil
     for i, line in ipairs(tip.lines) do
         local text = line.leftText
         if ns.IsSecret(text) then
@@ -197,11 +231,16 @@ local function SubtitleBit()
             if i > 1 and not bit then
                 local s = text:match("^<(.+)>$") or text
                 local b = trackByName[s:lower()]
-                if b and not SUBTITLE_SKIP[b] then bit, sub = b, s end
+                if b and not SUBTITLE_SKIP[b] then
+                    bit, sub, class = b, s, nil
+                elseif i == 2 then
+                    class = ClassInSubtitle(s)
+                    if class then sub = s end
+                end
             end
         end
     end
-    return bit, sub, table.concat(raw, " | ")
+    return bit, sub, table.concat(raw, " | "), class
 end
 
 -- Creatures are identified by their NPC ID; mailboxes and other objects
@@ -279,11 +318,13 @@ _G.Nocturne.RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(_, i
     if not mapID then return end
     local kind = KIND[itype]
     local name, id, isCreature = NpcIdentity()
-    local subBit, subText, tipLines
-    if isCreature then subBit, subText, tipLines = SubtitleBit() end
+    local subBit, subText, tipLines, class
+    if isCreature then subBit, subText, tipLines, class = SubtitleBit() end
 
+    -- Class trainers are saved for every class; only the player's own
+    -- class is displayed (PoiShown).
     local rank, v = RANK_NONE, nil
-    if subBit then
+    if subBit or class then
         rank, v = RANK_SUBTITLE, subBit
     elseif kind and not kind.vendor then
         rank = RANK_SERVICE
@@ -291,7 +332,7 @@ _G.Nocturne.RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(_, i
         rank, v = RANK_VENDOR, ClassifyVendor()
     end
     ns.lastInteraction = {
-        itype = itype, sub = subText, subBit = subBit, rank = rank, tip = tipLines,
+        itype = itype, sub = subText, subBit = subBit, class = class, rank = rank, tip = tipLines,
     }
 
     local pois = ns.db.pois
@@ -317,8 +358,9 @@ _G.Nocturne.RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", function(_, i
     rec.x, rec.y = x, y
     rec.n = name or rec.n
     local cur = Rank(rec)
-    if rank > cur or (rank == cur and rank > RANK_NONE and v ~= nil) then
+    if rank > cur or (rank == cur and rank > RANK_NONE and (v ~= nil or class ~= nil)) then
         rec.t, rec.v, rec.r = itype, v, rank
+        rec.c, rec.s = class, class and subText or nil
     end
     ns.lastInteraction.key = key
     RefreshMapPins()
@@ -352,6 +394,7 @@ ns.providers[#ns.providers + 1] = provider
 provider.results = {}
 
 local function PoiLabel(poi)
+    if poi.c then return poi.s or "Class Trainer" end
     local kind = KIND[poi.t]
     if poi.v then
         local info = FilterInfo(poi.v)
@@ -372,6 +415,20 @@ local function PoiBit(poi)
         return ns.TrackingFilterActive(poi.v) and poi.v or nil
     end
     return ActiveBit(KIND[poi.t])
+end
+
+-- Whether a POI is drawn (compass and world map), plus its icon: a fileID
+-- (tracking filter icon) or an atlas. Class trainers have no tracking
+-- filter; they show only for the player's own class.
+local function PoiShown(poi)
+    if poi.c then
+        if poi.c ~= select(2, UnitClass("player")) then return false end
+        local lower = poi.c:lower()
+        return true, nil, ns.FirstAtlas("classicon-" .. lower, "groupfinder-icon-class-" .. lower)
+    end
+    local bit = PoiBit(poi)
+    if not bit then return false end
+    return true, FilterIcon(bit), nil
 end
 
 -- A waypoint read back from the client can drift in the last float digits.
@@ -406,8 +463,8 @@ function provider:Scan(playerMapID, playerInstance)
     local wp = C_SuperTrack.IsSuperTrackingUserWaypoint() and C_Map.GetUserWaypoint()
     for _, mapID in ipairs(ns.CandidateMaps(playerMapID)) do
         for key, poi in pairs(ns.db.pois[mapID] or {}) do
-            local bit = not WaypointAt(wp, mapID, poi.x, poi.y) and PoiBit(poi)
-            if bit then
+            local shown, icon, atlas = PoiShown(poi)
+            if shown and not WaypointAt(wp, mapID, poi.x, poi.y) then
                 local wx, wy = ns.MapToWorld(mapID, poi.x, poi.y, playerInstance)
                 if wx then
                     results[#results + 1] = {
@@ -416,7 +473,8 @@ function provider:Scan(playerMapID, playerInstance)
                         title = PoiTitle(poi),
                         x = wx,
                         y = wy,
-                        icon = FilterIcon(bit),
+                        icon = icon,
+                        atlas = atlas,
                     }
                 end
             end
@@ -433,16 +491,17 @@ function ns.LearnedPOIDiag(lines)
     Migrate()
     local li = ns.lastInteraction
     if li then
-        lines[#lines + 1] = ("  lastInteraction it=%s sub=%s subBit=%s rank=%s key=%s"):format(
-            tostring(li.itype), tostring(li.sub), tostring(li.subBit), tostring(li.rank),
-            tostring(li.key))
+        lines[#lines + 1] = ("  lastInteraction it=%s sub=%s subBit=%s class=%s rank=%s key=%s"):format(
+            tostring(li.itype), tostring(li.sub), tostring(li.subBit), tostring(li.class),
+            tostring(li.rank), tostring(li.key))
         lines[#lines + 1] = "  tooltip: " .. tostring(li.tip)
     end
     local mapID = ns.player.mapID
     for key, poi in pairs(ns.db and ns.db.pois and (ns.db.pois[mapID] or {}) or {}) do
-        lines[#lines + 1] = ("  learn %s t=%s v=%s r=%s label=%s bit=%s"):format(
-            key, tostring(poi.t), tostring(poi.v), tostring(Rank(poi)),
-            tostring(PoiLabel(poi)), tostring(PoiBit(poi)))
+        local shown, icon, atlas = PoiShown(poi)
+        lines[#lines + 1] = ("  learn %s t=%s v=%s c=%s r=%s label=%s shown=%s icon=%s"):format(
+            key, tostring(poi.t), tostring(poi.v), tostring(poi.c), tostring(Rank(poi)),
+            tostring(PoiLabel(poi)), tostring(shown), tostring(atlas or icon))
     end
 end
 
@@ -564,7 +623,7 @@ function PinMixin:OnAcquired(data)
         self.Texture:SetTexture(data.icon)
         self.Texture:SetTexCoord(0, 1, 0, 1)
     else
-        self.Texture:SetAtlas("Waypoint-MapPin-Tracked")
+        self.Texture:SetAtlas(data.atlas or "Waypoint-MapPin-Tracked")
     end
     self:SetPosition(data.x, data.y)
 end
@@ -598,14 +657,15 @@ local function EnsureMapProvider()
         if not (ns.db and ns.db.pois) then return end
         -- Same rule as the compass: only POIs whose tracking filter is on.
         for _, poi in pairs(ns.db.pois[mapID] or {}) do
-            local bit = PoiBit(poi)
-            if bit then
+            local shown, icon, atlas = PoiShown(poi)
+            if shown then
                 self:GetMap():AcquirePin(PIN_TEMPLATE, {
                     x = poi.x,
                     y = poi.y,
                     name = poi.n,
                     label = PoiLabel(poi),
-                    icon = FilterIcon(bit),
+                    icon = icon,
+                    atlas = atlas,
                 })
                 lastRefresh.n = lastRefresh.n + 1
             end

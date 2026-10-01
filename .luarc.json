@@ -174,7 +174,12 @@
         "UnitGUID",
         "UnitName",
         "wipe",
-        "UiMapPoint"
+        "UiMapPoint",
+        "GetNumClasses",
+        "C_CreatureInfo",
+        "LOCALIZED_CLASS_NAMES_MALE",
+        "LOCALIZED_CLASS_NAMES_FEMALE",
+        "UnitClass"
     ],
     "workspace.library": [
         "tools/luals"
