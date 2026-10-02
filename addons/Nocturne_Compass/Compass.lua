@@ -196,7 +196,11 @@ end
 
 local function ShouldHide()
     local db = ns.db
-    return (db.hideInCombat and UnitAffectingCombat("player")) or false
+    if db.hideInCombat and UnitAffectingCombat("player") then return true end
+    -- Nocturne_Extra's boss frame takes over the compass's spot while an
+    -- elite/boss is the hard target.
+    local extra = Nocturne.modules.extra
+    return (extra and extra:IsBossFrameUp()) or false
 end
 
 -- Throttled to 60Hz: smooth enough to not be perceptible while still capping

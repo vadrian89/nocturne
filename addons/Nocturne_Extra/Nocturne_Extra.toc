@@ -15,4 +15,5 @@ Init.lua
 DB.lua
 EditMode.lua
 Frames.lua
+BossFrame.lua
 Options.lua

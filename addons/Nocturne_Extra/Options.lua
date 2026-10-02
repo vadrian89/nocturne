@@ -8,6 +8,11 @@ function ns:InitOptions()
     s:Checkbox("hideTarget", "Hide target frame", "Hide the Blizzard target unit frame.")
     s:Checkbox("targetSheath", "Sheath follows hard target",
         "Unsheathe weapons while a hard target can be attacked; sheath when the target is cleared. Soft targets are ignored.")
+    s:Checkbox("bossFrame", "Boss frame over compass",
+        "While the hard target is elite, rare, rare elite or a boss, show its health/power bars in place of the compass.")
+    s:Button("Preview boss frame", "Preview", function() ns:ToggleBossFramePreview() end,
+        "Show the boss frame with fake data. Click again to hide.")
+    s:Slider("bossNameSize", "Boss name size", "Font size of the name above the boss bar.", 8, 28, 1)
     s:Checkbox("hideBags", "Hide bag bar",
         "Hide the backpack and bag slot buttons near the micro menu. Bag windows still open with the keybind.")
     s:Checkbox("hideChatInCombat", "Hide chat in combat (solo)",
@@ -34,6 +39,8 @@ SlashCmdList.NOCTURNEEXTRA = function(msg)
     msg = strlower(strtrim(msg or ""))
     if msg == "layout" then
         ns:ApplyEditModeLayout()
+    elseif msg == "boss" then
+        ns:ToggleBossFramePreview()
     elseif msg == "diag" then
         _G.Nocturne.ShowCopyText("Nocturne: Extra — diag", ns:DiagText())
     else

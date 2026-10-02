@@ -190,6 +190,7 @@ function ns:ApplySettings()
     SyncSuppression()
     ns:ApplyConsolePort()
     SyncSheath()
+    if ns.SyncBossFrame then ns:SyncBossFrame() end
 end
 
 Nocturne.RegisterEvent("PLAYER_TARGET_CHANGED", SyncSheath)
@@ -330,6 +331,9 @@ function ns:DiagText()
                     and Enum.EditModePresetLayoutsMeta.NumValues),
                 table.concat(names, " "))
         end)(),
+        ("bossFrame=%s shown=%s"):format(
+            tostring(ns.db.bossFrame),
+            tostring(ns.bossFrame and ns.bossFrame:IsShown())),
     }
     for i = 1, #suppressors do
         local s = suppressors[i]
