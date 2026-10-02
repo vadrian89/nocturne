@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
-ns = _G.Nocturne.RegisterModule("utils", ns)
+ns = _G.Nocturne.RegisterModule("extra", ns)
 
 ns.ADDON_NAME = ADDON_NAME
 ns.VERSION = "0.1.0"

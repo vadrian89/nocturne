@@ -74,7 +74,7 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   readable). `C_Secrets.*` predicates report secrecy state but never expose
   values — there is no sanctioned secret comparison, so "at rest" style
   logic must track `UNIT_HEALTH`/`UNIT_POWER_*` event activity instead
-  (see `Nocturne_Utils/Frames.lua`). StatusBars fed by Blizzard (PRD,
+  (see `Nocturne_Extra/Frames.lua`). StatusBars fed by Blizzard (PRD,
   PlayerFrame) are no oracle either: `GetValue`/`GetMinMaxValues` are secret.
 - `UNIT_HEALTH_FREQUENT` no longer exists (folded into `UNIT_HEALTH` in
   9.0.1). `Nocturne.RegisterEvent` silently skips unknown events, so a stale

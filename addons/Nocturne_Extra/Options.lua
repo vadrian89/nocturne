@@ -1,7 +1,7 @@
 local _, ns = ...
 
 function ns:InitOptions()
-    local s = _G.Nocturne.NewSettings("Nocturne: Utils", "NocturneUtils_", ns.db, ns.defaults,
+    local s = _G.Nocturne.NewSettings("Nocturne: Extra", "NocturneExtra_", ns.db, ns.defaults,
         function() ns:ApplySettings() end)
     ns.category = s.category
 
@@ -22,28 +22,28 @@ function ns:OpenOptions()
     Settings.OpenToCategory(ns.category:GetID())
 end
 
-SLASH_NOCTURNEUTILS1 = "/nutils"
-SLASH_NOCTURNEUTILS2 = "/nutl"
-SlashCmdList.NOCTURNEUTILS = function(msg)
+SLASH_NOCTURNEEXTRA1 = "/nextra"
+SLASH_NOCTURNEEXTRA2 = "/next"
+SlashCmdList.NOCTURNEEXTRA = function(msg)
     msg = strlower(strtrim(msg or ""))
     if msg == "diag" then
-        _G.Nocturne.ShowCopyText("Nocturne: Utils — diag", ns:DiagText())
+        _G.Nocturne.ShowCopyText("Nocturne: Extra — diag", ns:DiagText())
     else
         ns:OpenOptions()
     end
 end
 
-function NocturneUtils_OnCompartmentClick()
+function NocturneExtra_OnCompartmentClick()
     ns:OpenOptions()
 end
 
-function NocturneUtils_OnCompartmentEnter(_, menuButton)
+function NocturneExtra_OnCompartmentEnter(_, menuButton)
     GameTooltip:SetOwner(menuButton, "ANCHOR_RIGHT")
-    GameTooltip:AddLine("Nocturne: Utils", 1, 1, 1)
+    GameTooltip:AddLine("Nocturne: Extra", 1, 1, 1)
     GameTooltip:AddLine("Click to open settings", 0.8, 0.8, 0.8)
     GameTooltip:Show()
 end
 
-function NocturneUtils_OnCompartmentLeave()
+function NocturneExtra_OnCompartmentLeave()
     GameTooltip:Hide()
 end

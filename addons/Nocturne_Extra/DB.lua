@@ -10,6 +10,6 @@ ns.defaults = {
 
 -- Called from ADDON_LOADED (see Init.lua) — SavedVariables are nil until then.
 function ns:InitDB()
-    NocturneUtilsDB = _G.Nocturne.MergeDefaults(_G.NocturneUtilsDB or {}, ns.defaults)
-    ns.db = NocturneUtilsDB
+    NocturneExtraDB = _G.Nocturne.MergeDefaults(_G.NocturneExtraDB or {}, ns.defaults)
+    ns.db = NocturneExtraDB
 end
