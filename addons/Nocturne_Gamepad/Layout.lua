@@ -151,6 +151,23 @@ function ns:ApplyLayout()
     return true
 end
 
+-- cluster.width is baked from UIParent's width at build time, so a
+-- resolution or UI-scale change leaves the bar (and the edge-pinned rings)
+-- sized for the old screen. Rebuild the preset, and re-apply it through
+-- CP's own path when it's the live layout.
+function ns:RefreshLayout()
+    if not ns:CPEnvReady() then return false end
+    local live = _G.ConsolePort_BarLayout
+    local isLive = ns:IsLayoutLive()
+        or (type(live) == 'table' and live.name == PRESET_NAME)
+    if not (isLive or (ns.db and ns.db.compactLayout)) then return false end
+    ns:RegisterPreset()
+    if isLive then
+        ConsolePort('layout ' .. PRESET_KEY)
+    end
+    return true
+end
+
 function ns:ResetLayout()
     if not ns:CPEnvReady() then return false end
     local presets = _G.ConsolePort_BarPresets

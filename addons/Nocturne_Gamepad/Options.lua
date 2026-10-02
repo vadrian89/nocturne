@@ -89,5 +89,9 @@ function ns:DiagText()
             tostring(ns.db and ns.db.stockRestored)),
         ("layoutLive=%s pad4=%s,%s clusterButtons=%d"):format(
             tostring(ns:IsLayoutLive()), tostring(px), tostring(py), n),
+        ("uiWidth=%s clusterWidth=%s"):format(
+            SafeV(UIParent:GetWidth()),
+            SafeV(live and live.children and live.children.Cluster
+                and live.children.Cluster.width)),
     }, "\n")
 end

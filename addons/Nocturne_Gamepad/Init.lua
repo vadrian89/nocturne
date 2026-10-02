@@ -62,3 +62,17 @@ _G.Nocturne.RegisterEvent("ADDON_LOADED", function(_, loadedAddon)
         Init()
     end
 end)
+
+-- Debounced: DISPLAY_SIZE_CHANGED can fire repeatedly while a window is
+-- being dragged to a new size.
+local resizeQueued = false
+local function OnDisplayChanged()
+    if resizeQueued then return end
+    resizeQueued = true
+    C_Timer.After(0.2, function()
+        resizeQueued = false
+        ns:RefreshLayout()
+    end)
+end
+_G.Nocturne.RegisterEvent("DISPLAY_SIZE_CHANGED", OnDisplayChanged)
+_G.Nocturne.RegisterEvent("UI_SCALE_CHANGED", OnDisplayChanged)
