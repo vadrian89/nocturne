@@ -12,6 +12,8 @@ function ns:InitOptions()
         "Hide chat frames during combat while not in a party or raid.")
     s:Checkbox("hideCPCluster", "Hide ConsolePort cluster while sheathed",
         "Fade out the ConsolePort cluster while weapons are sheathed. Always shown in combat.")
+    s:Checkbox("hidePlayerIdle", "Hide player frame when idle",
+        "Show the player frame only in combat, with weapons unsheathed, or while health/primary resource isn't at its rest value.")
 
     s:Finish()
 end

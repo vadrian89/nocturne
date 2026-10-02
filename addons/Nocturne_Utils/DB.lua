@@ -5,6 +5,7 @@ ns.defaults = {
     hideBags         = true, -- bag bar buttons (bag windows still open)
     hideChatInCombat = true, -- chat while solo and in combat
     hideCPCluster    = true, -- ConsolePort bar/cluster while weapons sheathed
+    hidePlayerIdle   = true, -- PlayerFrame while out of combat and at rest
 }
 
 -- Called from ADDON_LOADED (see Init.lua) — SavedVariables are nil until then.

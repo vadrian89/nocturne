@@ -65,7 +65,20 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   `HookBackdrop` method is gone. `Theme.ApplyBackdrop` tiers: native
   `frame:SetBackdrop` → guarded legacy `Mixin` fallback → no backdrop.
 - Guard possibly-secret values with `issecretvalue` (`ns.IsSecret`) before
-  math — Midnight marks combat-adjacent values secret.
+  math — Midnight marks combat-adjacent values secret. NOTE: the percent
+  APIs (`UnitHealthPercent`/`UnitPowerPercent`) return secret values
+  unconditionally — they're meant for `StatusBar`/`FontString` display, not
+  Lua logic. Raw `UnitHealth`/`UnitPower` for "player" CAN still be secret
+  with no active `C_RestrictedActions` entry and `canaccessvalue` false
+  (observed on a live 12.x client: current values secret, max values
+  readable). `C_Secrets.*` predicates report secrecy state but never expose
+  values — there is no sanctioned secret comparison, so "at rest" style
+  logic must track `UNIT_HEALTH`/`UNIT_POWER_*` event activity instead
+  (see `Nocturne_Utils/Frames.lua`). StatusBars fed by Blizzard (PRD,
+  PlayerFrame) are no oracle either: `GetValue`/`GetMinMaxValues` are secret.
+- `UNIT_HEALTH_FREQUENT` no longer exists (folded into `UNIT_HEALTH` in
+  9.0.1). `Nocturne.RegisterEvent` silently skips unknown events, so a stale
+  event name fails without any error — count events in diag to prove they fire.
 - `Mixin()` and `BackdropTemplateMixin` may both be missing; guard both.
 - Prefer `GameTooltip:AddLine` over `SetText` (LSP annotations mismatch).
 - The Personal Resource Display is `PersonalResourceDisplayFrame`
