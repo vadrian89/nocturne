@@ -14,6 +14,12 @@ local UnitPowerType = UnitPowerType
 local UnitPowerMax = UnitPowerMax
 local UnitGUID = UnitGUID
 local strsplit = strsplit
+local CurveConstants = CurveConstants
+
+-- UnitHealthPercent's optional curve scales the (secret) 0-1 result to a
+-- displayable 0-100 so SetFormattedText can render it without Lua ever
+-- reading the value.
+local PCT_SCALE = CurveConstants and CurveConstants.ScaleTo100
 
 -- "Above medium difficulty": elite+ classifications, plus skull-level bosses
 -- (UnitIsBossMob covers "worldboss" and ??-level mobs). Atlases match the
@@ -104,7 +110,7 @@ local function CreateBossFrame()
     name:SetJustifyH("CENTER")
     f.name = name
 
-    local hpText = T.CreateFontString(hp, 10, nil, "OVERLAY", "OUTLINE")
+    local hpText = T.CreateFontString(hp, 18, nil, "OVERLAY", "OUTLINE")
     hpText:SetPoint("RIGHT", -3, 0)
     f.hpText = hpText
 
@@ -175,13 +181,19 @@ local function TickAt(f, i)
     return t
 end
 
-local function RenderBars(f, name, iconKind, hpPct, hpText, breaks, ppct, color)
+local function RenderBars(f, name, iconKind, hpPct, hpPctText, breaks, ppct, color)
     f.name:SetText(name)
     if not f.icon:SetAtlas(BOSS_ATLAS[iconKind]) then
         f.icon:SetTexture(BOSS_TEXTURE[iconKind])
     end
     f.hp:SetValue(hpPct or 0)
-    f.hpText:SetText(hpText or "")
+    -- hpPctText is a 0-100 number or a secret; SetFormattedText renders
+    -- either without Lua touching it.
+    if hpPctText ~= nil then
+        f.hpText:SetFormattedText("%d%%", hpPctText)
+    else
+        f.hpText:SetText("")
+    end
     -- Bar width = frame width minus icon+gap (32) minus wrap insets (4).
     local barW = (f.lastW or 460) - 36
     for i, p in ipairs(breaks) do
@@ -209,7 +221,7 @@ local function Sync()
     if preview then
         AnchorToCompass(f)
         f:Show()
-        RenderBars(f, "Boss Preview", "boss", 0.73, "73%", DEFAULT_TICKS, 0.62,
+        RenderBars(f, "Boss Preview", "boss", 0.73, 73, DEFAULT_TICKS, 0.62,
             PowerBarColor and PowerBarColor["MANA"])
         return
     end
@@ -233,7 +245,7 @@ local function Sync()
     if guid and not ns.IsSecret(guid) then
         if guid ~= lastGuid then
             lastGuid = guid
-            npcID = tonumber(select(6, strsplit("-", guid)))
+            npcID = tonumber((select(6, strsplit("-", guid))))
         end
     else
         lastGuid, npcID = nil, nil
@@ -246,20 +258,28 @@ local function Sync()
     name = (name and not ns.IsSecret(name)) and name or ""
 
     -- StatusBar:SetValue accepts secret values; the percent APIs are the
-    -- sanctioned feed on this client.
+    -- sanctioned feed on this client. The scaled variant feeds the text so
+    -- the percent shows even when the value itself is secret.
     local pct = UnitHealthPercent("target")
-    local hpText = (pct and not ns.IsSecret(pct)) and ("%d%%"):format(pct * 100) or ""
+    local pctText = PCT_SCALE and UnitHealthPercent("target", true, PCT_SCALE) or nil
 
     -- Ticks: learned breakpoints for this NPC, else quarter marks.
     local breaks = (ns.db and npcID and ns.db.bossPhases[npcID]) or DEFAULT_TICKS
 
     local ptype, token = UnitPowerType("target")
     local pmax = UnitPowerMax("target")
-    local hasPower = (pmax and pmax > 0) or ns.IsSecret(pmax)
+    -- Secret values short-circuit `and` but still throw on `>`; test secrecy
+    -- first, compare only plain numbers.
+    local hasPower = false
+    if ns.IsSecret(pmax) then
+        hasPower = true
+    elseif pmax then
+        hasPower = pmax > 0
+    end
     local ppct = hasPower and UnitPowerPercent("target", ptype) or nil
     local c = token and PowerBarColor and PowerBarColor[token]
 
-    RenderBars(f, name, kind, pct, hpText, breaks, hasPower and (ppct or 0) or nil, c)
+    RenderBars(f, name, kind, pct, pctText, breaks, hasPower and (ppct or 0) or nil, c)
 
     -- Fill-then-dump detector: power pegged near max then released back to
     -- baseline means the resource mechanic fired — a phase boundary.
