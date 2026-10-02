@@ -17,7 +17,7 @@ local TWO_PI = 2 * math.pi
 
 -- Blizzard's layout: a 198px map inside a 215x226 ring, both centered.
 local MAP_DEFAULT, RING_W, RING_H = 198, 215, 226
-local EDGE_INSET = 12  -- cardinal letters' distance from the map's edge
+local EDGE_INSET = 12 -- cardinal letters' distance from the map's edge
 -- The outlined glyphs render ~1px left of their box center (observed: N/S
 -- sat left of the ring's north arrow).
 local LETTER_NUDGE_X = 1
@@ -58,12 +58,15 @@ end
 
 -- Follows Blizzard's setting: with rotation on the heading points up and
 -- the letters move around the edge (OnUpdate only then); off, they're fixed.
+-- PlaceCardinals always runs once so the letters hold a position even where
+-- GetPlayerFacing() never answers (instances) — otherwise the unanchored
+-- font strings never render.
 local function UpdateRotation()
     if not frame then return end
     local rotating = GetCVar("rotateMinimap") == "1"
     lastFacing = nil
     frame:SetScript("OnUpdate", rotating and OnUpdate or nil)
-    if not rotating then PlaceCardinals(0) end
+    PlaceCardinals(0)
 end
 
 local function HideAddonButtons()
