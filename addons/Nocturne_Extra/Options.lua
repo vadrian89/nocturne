@@ -15,6 +15,10 @@ function ns:InitOptions()
     s:Checkbox("hidePlayerIdle", "Hide player frame when idle",
         "Show the player frame only in combat, with weapons unsheathed, or while health/primary resource isn't at its rest value.")
 
+    s:Text(
+        "Import the bundled Blizzard Edit Mode layout as 'Nocturne' (a character layout) and make it the active one. An existing 'Nocturne' layout is replaced, so repeated applies stay clean.")
+    s:Button("Apply Blizzard edit mode layout", "Apply", function() ns:ApplyEditModeLayout() end)
+
     s:Finish()
 end
 
@@ -26,7 +30,9 @@ SLASH_NOCTURNEEXTRA1 = "/nextra"
 SLASH_NOCTURNEEXTRA2 = "/next"
 SlashCmdList.NOCTURNEEXTRA = function(msg)
     msg = strlower(strtrim(msg or ""))
-    if msg == "diag" then
+    if msg == "layout" then
+        ns:ApplyEditModeLayout()
+    elseif msg == "diag" then
         _G.Nocturne.ShowCopyText("Nocturne: Extra — diag", ns:DiagText())
     else
         ns:OpenOptions()

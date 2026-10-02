@@ -284,6 +284,21 @@ function ns:DiagText()
             tostring(GetSheathState()), tostring(CPInstalled()),
             tostring(cpFrame and cpFrame:GetName()),
             tostring(cpFrame and cpFrame:GetAlpha())),
+        -- Layout indices are client-space (presets first); custom array
+        -- position i == client index i + preset count.
+        (function()
+            local li = C_EditMode and C_EditMode.GetLayouts()
+            if not li then return "editmode=n/a" end
+            local names = {}
+            for i, l in ipairs(li.layouts) do
+                names[#names + 1] = i .. ":" .. (l.layoutName or "?")
+            end
+            return ("editmode active=%s presets=%s customs=[%s]"):format(
+                SafeV(li.activeLayout),
+                SafeV(Enum.EditModePresetLayoutsMeta
+                    and Enum.EditModePresetLayoutsMeta.NumValues),
+                table.concat(names, " "))
+        end)(),
     }
     for i = 1, #suppressors do
         local s = suppressors[i]

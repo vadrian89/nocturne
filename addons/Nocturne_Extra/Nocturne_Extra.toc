@@ -13,5 +13,6 @@
 
 Init.lua
 DB.lua
+EditMode.lua
 Frames.lua
 Options.lua
