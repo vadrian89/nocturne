@@ -5,6 +5,10 @@ local Nocturne = _G.Nocturne
 local IsInGroup = IsInGroup
 local UnitAffectingCombat = UnitAffectingCombat
 local GetSheathState = GetSheathState
+local ToggleSheath = ToggleSheath
+local UnitExists = UnitExists
+local UnitCanAttack = UnitCanAttack
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local EnumerateFrames = EnumerateFrames
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
@@ -157,11 +161,38 @@ function ns:ApplyConsolePort()
     end
 end
 
+-- Auto-sheath driven by the hard target. PLAYER_TARGET_CHANGED only fires
+-- for the hard target (soft targets live on "softenemy"/"softfriend" units),
+-- so soft targeting is ignored for free. ToggleSheath is the only sheath
+-- API — compare desired vs. current state first to keep it idempotent.
+-- Sheathing is skipped in combat (the client won't sheath anyway) and
+-- retried on PLAYER_REGEN_ENABLED via ApplySettings.
+local function SyncSheath()
+    if not (ns.db and ns.db.targetSheath) then return end
+    local wantSheathed = true
+    if UnitExists("target") then
+        local attackable = UnitCanAttack("player", "target")
+        local dead = UnitIsDeadOrGhost("target")
+        -- Secret values can't be compared; leave the sheath state alone.
+        if ns.IsSecret(attackable) or ns.IsSecret(dead) then return end
+        wantSheathed = not attackable or dead
+    end
+    if wantSheathed and UnitAffectingCombat("player") then
+        wantSheathed = false
+    end
+    if ((GetSheathState() or 1) == 1) ~= wantSheathed then
+        ToggleSheath()
+    end
+end
+
 function ns:ApplySettings()
     if not ns.db then return end
     SyncSuppression()
     ns:ApplyConsolePort()
+    SyncSheath()
 end
+
+Nocturne.RegisterEvent("PLAYER_TARGET_CHANGED", SyncSheath)
 
 -- Sheath toggles fire UNIT_MODEL_CHANGED for the player; the ticker also
 -- re-applies alpha when ConsolePort's own fades fight the suppression.
@@ -218,10 +249,10 @@ local function SafeV(v) return ns.IsSecret(v) and "<secret>" or tostring(v) end
 
 function ns:DiagText()
     local out = {
-        ("target=%s bags=%s chatCombat=%s cpCluster=%s playerIdle=%s"):format(
+        ("target=%s bags=%s chatCombat=%s cpCluster=%s playerIdle=%s targetSheath=%s"):format(
             tostring(ns.db.hideTarget), tostring(ns.db.hideBags),
             tostring(ns.db.hideChatInCombat), tostring(ns.db.hideCPCluster),
-            tostring(ns.db.hidePlayerIdle)),
+            tostring(ns.db.hidePlayerIdle), tostring(ns.db.targetSheath)),
         ("playerFrame shown=%s alpha=%s hidden=%s cond=%s"):format(
             tostring(_G.PlayerFrame and _G.PlayerFrame:IsShown()),
             _G.PlayerFrame and SafeV(_G.PlayerFrame:GetAlpha()) or "nil",
