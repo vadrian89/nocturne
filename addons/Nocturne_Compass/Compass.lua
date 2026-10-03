@@ -175,8 +175,14 @@ local function UpdatePlayer()
     local mapID = GetBestMapForUnit("player")
     p.mapID = mapID
     p.mapX, p.mapY = nil, nil
+    local fixed = false
     if mapID then
         local pos = GetPlayerMapPosition(mapID, "player")
+        -- No position inside instances: quest pin distances stand in.
+        if not pos then
+            pos = ns.QuestFix(mapID)
+            fixed = pos ~= nil
+        end
         if pos then
             if not ns.IsSecret(pos.x) and not ns.IsSecret(pos.y) then
                 p.mapX, p.mapY = pos:GetXY()
@@ -185,12 +191,16 @@ local function UpdatePlayer()
             if inst and wpos and not ns.IsSecret(wpos.x) and not ns.IsSecret(wpos.y) then
                 p.x, p.y = wpos:GetXY()
                 p.instance = inst
+            else
+                fixed = false
             end
         end
     end
+    p.fixed = fixed
     local facing = GetPlayerFacing()
+    if facing == nil and fixed then facing = ns.FixHeading(p.x, p.y, p.instance) end
     if not ns.IsSecret(facing) then
-        p.facing = facing -- nil while inside instances
+        p.facing = facing -- nil inside instances without a position fix
     end
 end
 
@@ -207,6 +217,10 @@ end
 -- cost on uncapped framerates well above that.
 local UPDATE_INTERVAL = 1 / 60
 local sinceUpdate = 0
+
+-- Shown in place of the heading strip while it can't be drawn.
+local NOTICE_NO_DATA = "No navigation data here"
+local NOTICE_MOVE = "Move to get a heading"
 
 -- The bar is hidden by fading (alpha 0); its buttons must also stop taking
 -- clicks.
@@ -242,9 +256,16 @@ local function OnUpdate(_, elapsed)
         end
     end
 
-    -- GetPlayerFacing() is nil inside instances: keep the bar (zone, coords,
-    -- minimap menu) but drop the heading strip and markers.
+    -- GetPlayerFacing() is nil inside instances: without a position fix
+    -- (QuestFix.lua) keep the bar (zone, coords, minimap menu) but drop the
+    -- heading strip and markers.
     local canNavigate = ns.player.facing ~= nil
+    -- With a position fix the heading is only a few steps away.
+    local notice = not canNavigate and (ns.player.fixed and NOTICE_MOVE or NOTICE_NO_DATA) or nil
+    if notice ~= ns.noticeText then
+        ns.noticeText = notice
+        ns.notice:SetText(notice or "")
+    end
     if canNavigate ~= ns.canNavigate then
         ns.canNavigate = canNavigate
         ns.drum:SetShown(canNavigate)
@@ -297,6 +318,9 @@ function ns:CreateCompassFrame()
 
     local drum = CreateFrame("Frame", nil, clip)
     ns.drum = drum
+
+    ns.notice = T.CreateFontString(clip, 11, T.colors.textDim, "OVERLAY")
+    ns.notice:SetPoint("CENTER", clip, "CENTER", 0, 0)
 
     ns.zone = T.CreateFontString(f, 12, nil, "OVERLAY", "OUTLINE")
     ns.coords = T.CreateFontString(f, 12, T.colors.accent, "OVERLAY", "OUTLINE")

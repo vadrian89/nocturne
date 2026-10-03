@@ -36,6 +36,19 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   (cross-map); it returns nil for same-map quests.
 - `GetPlayerFacing()` returns nil inside instances — use it as the
   "cannot navigate" signal.
+- Inside instances (proven in Ragefire Chasm, party): `UnitPosition` and
+  `C_Map.GetPlayerMapPosition` (the instance map and every ancestor) are
+  nil, `C_Navigation` is off (state 0, no frame), and the rotating minimap
+  ring is no oracle — `MinimapCompassTexture:GetRotation()` raises
+  "forbidden aspect 'QueryRotation'" for tainted code and `GetTexCoord()`
+  stays constant while the ring turns.
+- `C_QuestLog.GetDistanceSqToQuest` still answers there: 2D yards² to the
+  pin `C_QuestLog.GetQuestsOnMap` lists. Three pins trilaterate the player
+  (`Nocturne_Compass/QuestFix.lua`). Checked outdoors against the real
+  position (`/ncmp diag`, map 467, 4 pins): the fix matched
+  `GetPlayerMapPosition` to within 0.003 yd. *(Unverified in-game: the
+  compass running on it inside an instance, whose heading is the course
+  over ground, not the facing.)*
 
 ## General WoW UI gotchas (not Midnight-specific, learned the hard way)
 

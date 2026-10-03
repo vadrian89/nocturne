@@ -146,6 +146,9 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                     S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
                     UIParent:GetWidth(), UIParent:GetHeight())
         end
+        -- Position fix from quest pin distances (QuestFix.lua); outside
+        -- instances compare fix= against rawMapPos= above.
+        ns.QuestFixDiag(p.mapID, lines)
         -- Tracked content (C_ContentTracking): what is followed, and what
         -- the client places on the player's map for it.
         local CT = C_ContentTracking
