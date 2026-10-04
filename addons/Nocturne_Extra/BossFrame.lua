@@ -108,7 +108,7 @@ local function CreateBossFrame()
     f.pp = pp
     -- Badge centered on the hp bar, tight to its left.
     icon:SetPoint("RIGHT", hpWrap, "LEFT", -4, 0)
-    hp:GetStatusBarTexture():SetVertexColor(0.0, 1.0, 0.0)
+    hp:GetStatusBarTexture():SetVertexColor(1.0, 0.0, 0.0)
     pp:GetStatusBarTexture():SetVertexColor(0.30, 0.40, 0.90)
 
     -- Name floats above the hp bar, centered on it — no backdrop.
