@@ -20,6 +20,11 @@ end
 -- Midnight (12.0): some values may be "secret" on tainted paths.
 Nocturne.IsSecret = _G.issecretvalue or function() return false end
 
+-- WoW Forever runs the Mainline engine (WOW_PROJECT_ID 1) on interface
+-- 16xxx; the build number is the only flavor signal it exposes.
+local interface = select(4, GetBuildInfo())
+Nocturne.IS_FOREVER = interface >= 16000 and interface < 17000
+
 function Nocturne.RegisterModule(name, module)
     Nocturne.modules[name] = module
     return module

@@ -92,3 +92,28 @@ function Nocturne.NewSuppressor(getFrame, want)
     end
     return s
 end
+
+-- WoW Forever's gamepad interface runs window focus in the name of whoever
+-- opens a Blizzard menu or UI panel; opened from addon code, its
+-- SetPreferredGamepadInteractTarget is refused (ADDON_ACTION_FORBIDDEN).
+local GAMEPAD = Enum.InputDeviceInterfaceType and Enum.InputDeviceInterfaceType.Gamepad
+
+function Nocturne.GamepadUI()
+    local style = C_InputInterfaceStyle and C_InputInterfaceStyle.GetCurrentStyle
+    return GAMEPAD ~= nil and style ~= nil and style() == GAMEPAD
+end
+
+-- True (and says so) when `what` must not be opened from addon code.
+function Nocturne.GamepadRefuses(what)
+    if not Nocturne.GamepadUI() then return false end
+    Nocturne.Print(("%s can't be opened by an addon with the gamepad interface on."):format(what))
+    return true
+end
+
+function Nocturne.OpenSettings(category)
+    if Nocturne.GamepadRefuses("Options") then
+        Nocturne.Print("Use Options -> AddOns instead.")
+        return
+    end
+    Settings.OpenToCategory(category:GetID())
+end

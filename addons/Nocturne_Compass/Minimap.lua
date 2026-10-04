@@ -322,6 +322,7 @@ function ns:InitMinimapButtons()
     launcher:SetPoint("LEFT", ns.frame, "RIGHT", BUTTON_GAP, 0)
     SetIcon(launcher.icon, "Interface\\Icons\\INV_Misc_Map02")
     launcher:SetScript("OnClick", function(self)
+        if Nocturne.GamepadRefuses("The minimap menu") then return end
         if MenuUtil and MenuUtil.CreateContextMenu then MenuUtil.CreateContextMenu(self, BuildMenu) end
     end)
 
@@ -340,7 +341,9 @@ function ns:InitMinimapButtons()
             tip:AddLine(("Calendar: %d pending invite(s)"):format(PendingInvites()))
             tip:AddLine("Click to open the calendar.", 1, 1, 1)
         end,
-        function() if _G.ToggleCalendar then _G.ToggleCalendar() end end)
+        function()
+            if _G.ToggleCalendar and not Nocturne.GamepadRefuses("The calendar") then _G.ToggleCalendar() end
+        end)
 
     AddIndicator("Interface\\Icons\\Trade_BlackSmithing", "UI-HUD-Minimap-CraftingOrder-Up",
         PersonalOrders,

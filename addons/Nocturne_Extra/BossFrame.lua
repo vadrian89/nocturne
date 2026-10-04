@@ -8,8 +8,16 @@ local UnitCanAttack = UnitCanAttack
 local UnitIsBossMob = UnitIsBossMob
 local UnitClassification = UnitClassification
 local UnitName = UnitName
-local UnitHealthPercent = UnitHealthPercent
-local UnitPowerPercent = UnitPowerPercent
+local function RawPercent(cur, max)
+    if not max or max <= 0 then return 0 end
+    return cur / max
+end
+local UnitHealthPercent = UnitHealthPercent or function(unit)
+    return RawPercent(UnitHealth(unit), UnitHealthMax(unit))
+end
+local UnitPowerPercent = UnitPowerPercent or function(unit, ptype)
+    return RawPercent(UnitPower(unit, ptype), UnitPowerMax(unit, ptype))
+end
 local UnitPowerType = UnitPowerType
 local UnitPowerMax = UnitPowerMax
 local UnitGUID = UnitGUID

@@ -34,7 +34,18 @@ function Builder:Slider(key, name, tooltip, minValue, maxValue, step)
 end
 
 -- `labels` is an array; the stored value is the selected index.
+-- On WoW Forever the dropdown is a slider over the indices: Blizzard calls
+-- a dropdown's options function directly (no securecallfunction), so the
+-- menu and the gamepad focus it opens run in our name and the gamepad's
+-- SetPreferredGamepadInteractTarget is refused (ADDON_ACTION_FORBIDDEN).
 function Builder:Dropdown(key, name, tooltip, labels)
+    if Nocturne.IS_FOREVER then
+        local lines = {}
+        for i, label in ipairs(labels) do lines[i] = ("%d = %s"):format(i, label) end
+        local list = table.concat(lines, "\n")
+        self:Slider(key, name, tooltip and (tooltip .. "\n\n" .. list) or list, 1, #labels, 1)
+        return
+    end
     -- Spelled differently across client branches; guard both.
     local CreateDD = Settings.CreateDropdown or Settings.CreateDropDown
     if not (CreateDD and Settings.CreateControlTextContainer) then return end
@@ -52,19 +63,23 @@ end
 -- overriding the initializer's InitFrame. Height is measured off a
 -- scratch font string at a width a bit under the list's real element
 -- width (~620px), so the estimate never comes out short.
+-- The font strings live in our own weak table, not as fields on the
+-- list's pooled frames.
 local measure
+local textOf = setmetatable({}, { __mode = "k" })
 local function InitTextFrame(self, frame)
-    if not frame.Text then
-        local fs = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local fs = textOf[frame]
+    if not fs then
+        fs = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         fs:SetPoint("TOPLEFT", 7, -4)
         fs:SetPoint("RIGHT", 0, 0)
         fs:SetJustifyH("LEFT")
         fs:SetJustifyV("TOP")
         fs:SetWordWrap(true)
-        frame.Text = fs
+        textOf[frame] = fs
     end
     local data = self:GetData()
-    frame.Text:SetText(data and data.text or "")
+    fs:SetText(data and data.text or "")
 end
 
 function Builder:Text(text)

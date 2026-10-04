@@ -22,7 +22,7 @@ function ns:InitOptions()
 end
 
 function ns:OpenOptions()
-    Settings.OpenToCategory(ns.category:GetID())
+    _G.Nocturne.OpenSettings(ns.category)
 end
 
 SLASH_NOCTURNEGAMEPAD1 = "/ngamepad"

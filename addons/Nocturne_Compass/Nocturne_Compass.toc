@@ -1,4 +1,4 @@
-## Interface: 120001
+## Interface: 120001, 16001
 ## Title: Nocturne: Compass
 ## Notes: Console-style navigation strip with tracked quest markers.
 ## Author: Vadrian
