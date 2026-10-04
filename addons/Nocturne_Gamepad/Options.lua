@@ -18,6 +18,11 @@ function ns:InitOptions()
     s:Text(
         "The layout is applied through ConsolePort's own preset system and appears as 'Nocturne Compact' in the loadout presets. Your previous layout is saved as 'Backup (pre-Nocturne)'. Revert with /ngp reset.")
     s:Button("Apply compact layout now", "Apply", ApplyNow)
+    if _G.Nocturne.IS_FOREVER then
+        s:Checkbox("nativeRight", "Native gamepad bars on the right",
+            "Pin WoW Forever's native gamepad action bars to the right screen edge. Applied out of combat.")
+        s:Slider("nativeScale", "Native gamepad bars scale (%)", nil, 80, 160, 5)
+    end
     s:Finish()
 end
 
@@ -38,7 +43,8 @@ SlashCmdList.NOCTURNEGAMEPAD = function(msg)
             _G.Nocturne.Print("ConsolePort bar is not ready yet.")
         end
     elseif msg == "diag" then
-        _G.Nocturne.ShowCopyText("Nocturne: Gamepad — diag", ns:DiagText())
+        _G.Nocturne.ShowCopyText("Nocturne: Gamepad — diag",
+            ns:DiagText() .. "\n" .. ns:NativeDiagText())
     else
         ns:OpenOptions()
     end

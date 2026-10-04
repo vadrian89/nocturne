@@ -116,12 +116,11 @@ for _, name in ipairs({
     Suppress(name, ChatCond)
 end
 
--- ConsolePort: the cluster lives inside ConsolePortBarCluster, a secure
--- (protected) frame — Hide() on it would error in combat, so we suppress
--- with SetAlpha instead, which is legal on protected frames.
+-- Action bars faded while sheathed: ConsolePort's cluster and WoW Forever's
+-- native gamepad bars both hold secure (protected) children — Hide() would
+-- error in combat, so they're suppressed with SetAlpha, which is legal on
+-- protected frames.
 local IsAddOnLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or _G.IsAddOnLoaded
-local cpFrame
-local cpHidden = false
 
 local function CPInstalled()
     return IsAddOnLoaded
@@ -138,27 +137,48 @@ local function ResolveCP()
         or _G.ConsolePortCluster
 end
 
+-- Blizzard_GamepadActionBars (Forever only) never sets this frame's alpha.
+local function ResolveGamepadBars()
+    return _G.GamepadMainActionBarFrame
+end
+
+local barFaders = {
+    { name = "cp", resolve = ResolveCP, hidden = false },
+    { name = "gamepad", resolve = ResolveGamepadBars, hidden = false },
+}
+
+local function AnyBarHidden()
+    for _, b in ipairs(barFaders) do
+        if b.hidden then return true end
+    end
+    return false
+end
+
+local function FadeBar(b, wantHidden)
+    local f = b.resolve()
+    if b.frame and b.frame ~= f then
+        b.frame:SetAlpha(1)
+        b.hidden = false
+    end
+    b.frame = f
+    if not f then return end
+    if wantHidden then
+        b.hidden = true
+        f:SetAlpha(0)
+    elseif b.hidden then
+        b.hidden = false
+        f:SetAlpha(1)
+    end
+end
+
 -- GetSheathState(): 1 = sheathed, 2 = melee, 3 = ranged. In combat the
--- cluster always shows (casters can stay sheathed while fighting).
+-- bars always show (casters can stay sheathed while fighting).
 function ns:ApplyConsolePort()
     if not ns.db then return end
-    local f = ResolveCP()
-    if cpFrame and cpFrame ~= f then
-        cpFrame:SetAlpha(1)
-        cpHidden = false
-    end
-    cpFrame = f
-    if not f then return end
     local wantHidden = ns.db.hideCPCluster
         and (GetSheathState() or 1) == 1
         and not UnitAffectingCombat("player")
-    if wantHidden then
-        cpHidden = true
-        f:SetAlpha(0)
-    elseif cpHidden then
-        cpHidden = false
-        f:SetAlpha(1)
-    end
+    for _, b in ipairs(barFaders) do FadeBar(b, wantHidden) end
 end
 
 -- Auto-sheath driven by the hard target. PLAYER_TARGET_CHANGED only fires
@@ -238,7 +258,7 @@ end)
 -- the cluster fade. Idle unless it's on or still has something to restore.
 C_Timer.NewTicker(0.5, function()
     if not ns.db then return end
-    if ns.db.hideCPCluster or cpHidden then ns:ApplyConsolePort() end
+    if ns.db.hideCPCluster or AnyBarHidden() then ns:ApplyConsolePort() end
     -- Also covers the return-to-rest transition if the unit power/health
     -- events are renamed or throttled away on this client.
     if playerSuppressor and (ns.db.hidePlayerIdle or playerSuppressor.hidden) then
@@ -311,11 +331,18 @@ function ns:DiagText()
                 barInfo(prd and (prd.powerbar or prd.powerBar)),
                 barInfo(pf and pf.healthbar), barInfo(pf and pf.manabar))
         end)(),
-        ("combat=%s group=%s sheath=%s cpInstalled=%s cpFrame=%s alpha=%s"):format(
+        ("combat=%s group=%s sheath=%s cpInstalled=%s"):format(
             tostring(UnitAffectingCombat("player")), tostring(IsInGroup()),
-            tostring(GetSheathState()), tostring(CPInstalled()),
-            tostring(cpFrame and cpFrame:GetName()),
-            tostring(cpFrame and cpFrame:GetAlpha())),
+            tostring(GetSheathState()), tostring(CPInstalled())),
+        (function()
+            local out = {}
+            for _, b in ipairs(barFaders) do
+                local f = b.frame
+                out[#out + 1] = ("%s=%s alpha=%s hidden=%s"):format(b.name,
+                    tostring(f and f:GetName()), tostring(f and f:GetAlpha()), tostring(b.hidden))
+            end
+            return "bars: " .. table.concat(out, " | ")
+        end)(),
         -- Layout indices are client-space (presets first); custom array
         -- position i == client index i + preset count.
         (function()

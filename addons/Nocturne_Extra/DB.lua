@@ -8,7 +8,7 @@ ns.defaults = {
     bossNameSize     = 12,   -- font size of the name above the boss bar
     hideBags         = true, -- bag bar buttons (bag windows still open)
     hideChatInCombat = true, -- chat while solo and in combat
-    hideCPCluster    = true, -- ConsolePort bar/cluster while weapons sheathed
+    hideCPCluster    = true, -- ConsolePort cluster / Forever gamepad bars while sheathed
     hidePlayerIdle   = true, -- PlayerFrame while out of combat and at rest
 }
 

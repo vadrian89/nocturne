@@ -16,6 +16,7 @@ function ns:ApplySettings()
             ns:ApplyLayout()
         end
     end
+    if ns.db.nativeRight or ns.nativeMoved then ns:ApplyNativeBars() end
 end
 
 -- ConsolePort_Bar builds its env (env.Layout, env.Presets) on a deferred

@@ -1,11 +1,12 @@
 ## Interface: 120001, 16001
 ## Title: Nocturne: Gamepad
-## Notes: Console-style customization for the ConsolePort cluster bar.
+## Notes: Console-style layouts for the ConsolePort cluster bar and WoW Forever's native gamepad bars.
 ## Author: Vadrian
 ## Version: 0.1.0
 ## IconTexture: Interface\Icons\INV_Gauntlets_03
 ## SavedVariables: NocturneGamepadDB
-## Dependencies: Nocturne_Core, ConsolePort_Bar
+## Dependencies: Nocturne_Core
+## OptionalDeps: ConsolePort_Bar, Blizzard_GamepadActionBars
 ## Category: User Interface
 ## AddonCompartmentFunc: NocturneGamepad_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: NocturneGamepad_OnCompartmentEnter
@@ -14,4 +15,5 @@
 Init.lua
 DB.lua
 Layout.lua
+NativeBars.lua
 Options.lua

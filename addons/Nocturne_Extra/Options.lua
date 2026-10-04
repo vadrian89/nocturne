@@ -17,8 +17,8 @@ function ns:InitOptions()
         "Hide the backpack and bag slot buttons near the micro menu. Bag windows still open with the keybind.")
     s:Checkbox("hideChatInCombat", "Hide chat in combat (solo)",
         "Hide chat frames during combat while not in a party or raid.")
-    s:Checkbox("hideCPCluster", "Hide ConsolePort cluster while sheathed",
-        "Fade out the ConsolePort cluster while weapons are sheathed. Always shown in combat.")
+    s:Checkbox("hideCPCluster", "Hide action bars while sheathed",
+        "Fade out the ConsolePort cluster (and WoW Forever's native gamepad bars) while weapons are sheathed. Always shown in combat.")
     s:Checkbox("hidePlayerIdle", "Hide player frame when idle",
         "Show the player frame only in combat, with weapons unsheathed, or while health/primary resource isn't at its rest value.")
 
