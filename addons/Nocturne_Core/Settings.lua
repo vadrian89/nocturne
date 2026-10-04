@@ -27,6 +27,29 @@ function Builder:Checkbox(key, name, tooltip)
     Settings.CreateCheckbox(self.category, self:Register(key, name), tooltip)
 end
 
+-- A checkbox over live game state instead of a SavedVariables key: the
+-- panel reads `get()` when it draws the row and calls `set(value)` on edit.
+function Builder:ProxyCheckbox(key, name, tooltip, get, set)
+    if not Settings.RegisterProxySetting then return end
+    local setting = Settings.RegisterProxySetting(self.category, self.prefix .. key, "boolean", name,
+        false, function() return get() and true or false end, set)
+    Settings.CreateCheckbox(self.category, setting, tooltip)
+end
+
+-- A child page under this builder's category, sharing its db and prefix.
+-- Rows may be added to it later (e.g. once login data exists). *(Unverified
+-- — read from Blizzard's UI source: a page is built from its layout's
+-- initializers only when it's opened.)*
+function Builder:Subcategory(name)
+    return setmetatable({
+        category = Settings.RegisterVerticalLayoutSubcategory(self.category, name),
+        prefix = self.prefix,
+        db = self.db,
+        defaults = self.defaults,
+        onChange = self.onChange,
+    }, Builder)
+end
+
 function Builder:Slider(key, name, tooltip, minValue, maxValue, step)
     local options = Settings.CreateSliderOptions(minValue, maxValue, step)
     options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right)

@@ -165,6 +165,40 @@ local function TrackingInfo(i)
     return info, active
 end
 
+-- The full tracking list: learned townsfolk POIs follow these same
+-- toggles, so every category the client exposes gets an entry. Some
+-- entries share a display name ("Banker" covers several bank filters) —
+-- they collapse into one entry toggling them all. Shared by the minimap
+-- menu and the options' Tracking page.
+function ns.TrackingGroups()
+    local list, byName = {}, {}
+    if not (C_Minimap and C_Minimap.GetNumTrackingTypes) then return list end
+    for i = 1, C_Minimap.GetNumTrackingTypes() do
+        local name = TrackingInfo(i)
+        if name then
+            local entry = byName[name]
+            if not entry then
+                entry = { name = name, group = {} }
+                byName[name] = entry
+                list[#list + 1] = entry
+            end
+            entry.group[#entry.group + 1] = i
+        end
+    end
+    return list
+end
+
+function ns.TrackingGroupActive(group)
+    for _, i in ipairs(group) do
+        if select(2, TrackingInfo(i)) then return true end
+    end
+    return false
+end
+
+function ns.SetTrackingGroup(group, on)
+    for _, i in ipairs(group) do C_Minimap.SetTracking(i, on) end
+end
+
 local function AddBlizzardEntries(root)
     local landing = _G.ExpansionLandingPageMinimapButton
     if landing and landing:IsShown() then
@@ -176,46 +210,12 @@ local function AddBlizzardEntries(root)
         root:CreateButton(n > 0 and ("Calendar (%d)"):format(n) or "Calendar", function() _G.ToggleCalendar() end)
     end
 
-    if C_Minimap and C_Minimap.GetNumTrackingTypes then
-        -- The full tracking list: learned townsfolk POIs follow these same
-        -- toggles, so every category the client exposes gets an entry.
-        -- Some entries share a display name ("Banker" covers several bank
-        -- filters) — they collapse into one checkbox toggling them all.
-        local tracking, order, byName
-        for i = 1, C_Minimap.GetNumTrackingTypes() do
-            local name = TrackingInfo(i)
-            if name then
-                order = order or {}
-                byName = byName or {}
-                local group = byName[name]
-                if not group then
-                    group = {}
-                    byName[name] = group
-                    order[#order + 1] = name
-                end
-                group[#group + 1] = i
-            end
-        end
-        for _, name in ipairs(order or {}) do
-            local group = byName[name]
-            tracking = tracking or root:CreateButton("Tracking")
-            tracking:CreateCheckbox(name,
-                function()
-                    for _, i in ipairs(group) do
-                        if select(2, TrackingInfo(i)) then return true end
-                    end
-                end,
-                function()
-                    local on = true
-                    for _, i in ipairs(group) do
-                        if select(2, TrackingInfo(i)) then
-                            on = false
-                            break
-                        end
-                    end
-                    for _, i in ipairs(group) do C_Minimap.SetTracking(i, on) end
-                end)
-        end
+    local tracking
+    for _, entry in ipairs(ns.TrackingGroups()) do
+        tracking = tracking or root:CreateButton("Tracking")
+        tracking:CreateCheckbox(entry.name,
+            function() return ns.TrackingGroupActive(entry.group) end,
+            function() ns.SetTrackingGroup(entry.group, not ns.TrackingGroupActive(entry.group)) end)
     end
 end
 

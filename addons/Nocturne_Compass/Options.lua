@@ -59,8 +59,46 @@ function ns:InitOptions()
     s:Slider("minimapSize", "Minimap size",
         "Diameter of the round minimap in the top-right corner, in pixels (the ring scales with it).", 120, 320, 10)
 
+    ns.trackingOptions = s:Subcategory("Tracking")
     s:Finish()
+    ns:SyncTrackingOptions()
 end
+
+-- The Tracking page mirrors the minimap menu's tracking list. The list is
+-- empty before login and grows with learned skills (e.g. Find Herbs), so
+-- rows are appended as names appear; a row resolves its filters by name
+-- on every read/write since the client's indices may shift.
+local trackingRows = {}
+
+local function TrackingGroup(name)
+    for _, entry in ipairs(ns.TrackingGroups()) do
+        if entry.name == name then return entry.group end
+    end
+    return nil
+end
+
+function ns:SyncTrackingOptions()
+    local page = ns.trackingOptions
+    if not page then return end
+    for _, entry in ipairs(ns.TrackingGroups()) do
+        local name = entry.name
+        if not trackingRows[name] then
+            trackingRows[name] = true
+            page:ProxyCheckbox("tracking_" .. name, name, nil,
+                function()
+                    local group = TrackingGroup(name)
+                    return group ~= nil and ns.TrackingGroupActive(group)
+                end,
+                function(on)
+                    local group = TrackingGroup(name)
+                    if group then ns.SetTrackingGroup(group, on) end
+                end)
+        end
+    end
+end
+
+_G.Nocturne.RegisterEvent("PLAYER_LOGIN", function() ns:SyncTrackingOptions() end)
+_G.Nocturne.RegisterEvent("MINIMAP_UPDATE_TRACKING", function() ns:SyncTrackingOptions() end)
 
 function ns:OpenOptions()
     _G.Nocturne.OpenSettings(ns.category)
