@@ -169,6 +169,29 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   (`arg1`, secure frame fields) and don't call protected API from insecure
   code paths.
 
+## WoW Forever (Camelot, interface 16001)
+
+- Same Mainline engine/API; installed as `_classic_beta_` (beta). The
+  `.toc` lists `## Interface: 120001, 16001`; `Nocturne.IS_FOREVER` is
+  interface 16000-16999. Blizzard's source: wow-ui-source branch `forever`.
+- Edit Mode export strings differ: Midnight header `2 <count>`, Forever
+  `4 <interfaceStyle> <count>` (Forever misreads a Midnight string: count
+  lands in interfaceStyle). `Enum.EditModeSystem` and every setting enum
+  match for 0-25; Midnight 26 LossOfControl is Forever 28; Forever adds 26
+  MainActionBarEndCap, 27 GroupFinder (the queue eye; Midnight ties it to
+  the micro menu), 29 SwingTimer. A user layout is enabled only when its
+  interfaceStyle equals `InputUtil.GetCurrentInterfaceStyle()`. The bundled
+  `FOREVER_LAYOUT` was applied and checked in-game.
+- The native gamepad interface runs window focus in the name of whoever
+  opens a Blizzard menu or UI panel; from addon code its
+  `SetPreferredGamepadInteractTarget` is then refused
+  (ADDON_ACTION_FORBIDDEN) until `/reload`. Proven: `MenuUtil.CreateContextMenu`
+  from a click. Gate such opens with `Nocturne.GamepadRefuses`.
+  Settings dropdowns call the addon's options function directly (no
+  `securecallfunction`), so on Forever `Builder:Dropdown` is a slider.
+  *(Unverified fix.)* Closing the Settings panel also raises it for other
+  addons (seen for BugSack) — not Nocturne-specific.
+
 ## Conventions
 
 - Style: plain Lua, compact, Blizzard-ish naming (`camelCase` functions,
