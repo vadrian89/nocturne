@@ -59,13 +59,12 @@ function ns:RebuildDrum()
             fs = T.CreateFontString(ns.drum, 11, nil, "OVERLAY")
             letters[i] = fs
         end
-        local major = (deg % 90) == 0
         fs:SetText(CARDINALS[deg % 360])
-        fs:SetFont(T.fonts.main, major and 12 or 10, "")
-        local c = major and T.colors.text or T.colors.textDim
+        fs:SetFont(T.fonts.main, 20, "OUTLINE")
+        local c = T.colors.text
         fs:SetTextColor(c[1], c[2], c[3], c[4])
         fs:ClearAllPoints()
-        fs:SetPoint("CENTER", ns.drum, "CENTER", math.rad(deg) * ns.pxPerRad, -2)
+        fs:SetPoint("CENTER", ns.drum, "CENTER", math.rad(deg) * ns.pxPerRad, 0)
         fs:Show()
     end
     for j = i + 1, #letters do letters[j]:Hide() end
@@ -83,8 +82,8 @@ function ns:RebuildDrum()
                 ticks[n] = t
             end
             t:ClearAllPoints()
-            t:SetPoint("TOP", ns.drum, "TOP", math.rad(deg) * ns.pxPerRad, -2)
-            t:SetHeight(5)
+            t:SetPoint("CENTER", ns.drum, "CENTER", math.rad(deg) * ns.pxPerRad, 0)
+            t:SetHeight(6)
             t:Show()
         end
     end
@@ -288,7 +287,6 @@ function ns:CreateCompassFrame()
     local f = CreateFrame("Frame", "NocturneCompassFrame", UIParent)
     ns.frame = f
 
-    T.ApplyBackdrop(f)
     f:SetFrameStrata("MEDIUM")
     f:SetClampedToScreen(true)
     f:SetMovable(true)
@@ -303,23 +301,35 @@ function ns:CreateCompassFrame()
     end)
 
     local clip = CreateFrame("Frame", nil, f)
-    clip:SetPoint("TOPLEFT", 3, -3)
-    clip:SetPoint("BOTTOMRIGHT", -3, 3)
+    clip:SetAllPoints(f)
     clip:SetClipsChildren(true)
     ns.clip = clip
 
-    -- Center indicator under the current heading.
-    local center = clip:CreateTexture(nil, "ARTWORK")
-    center:SetSize(1, 8)
-    center:SetPoint("CENTER", clip, "CENTER", 0, 0)
+    -- The bar itself: a thin horizontal line the letters and markers sit on.
+    -- 2px at ~full alpha — at 1px/dim it renders sub-pixel and vanishes.
+    local line = clip:CreateTexture(nil, "BACKGROUND")
+    line:SetPoint("LEFT")
+    line:SetPoint("RIGHT")
+    line:SetHeight(2)
+    local lc = T.colors.stripLine
+    line:SetColorTexture(lc[1], lc[2], lc[3], 0.9)
+
+    -- Center indicator under the current heading. A square rotated 45°
+    -- renders as a diamond whose diagonal equals the box side; the
+    -- CLAMPTOBLACKADDITIVE wrap keeps the corners transparent.
     local ac = T.colors.accent
-    center:SetColorTexture(ac[1], ac[2], ac[3], 1)
+    local center = clip:CreateTexture(nil, "ARTWORK")
+    center:SetSize(10, 10)
+    center:SetTexture("Interface\\Buttons\\WHITE8x8", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    center:SetVertexColor(ac[1], ac[2], ac[3])
+    center:SetRotation(math.rad(45))
+    center:SetPoint("CENTER", clip, "CENTER", 0, 0)
     ns.centerTick = center
 
     local drum = CreateFrame("Frame", nil, clip)
     ns.drum = drum
 
-    ns.notice = T.CreateFontString(clip, 11, T.colors.textDim, "OVERLAY")
+    ns.notice = T.CreateFontString(clip, 11, T.colors.textDim, "OVERLAY", "OUTLINE")
     ns.notice:SetPoint("CENTER", clip, "CENTER", 0, 0)
 
     ns.zone = T.CreateFontString(f, 12, nil, "OVERLAY", "OUTLINE")

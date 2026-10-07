@@ -7,8 +7,7 @@ local pool = {}
 local banner
 local glowOn = false
 
-local DIST_Y = -17 -- distance label offset from the bar's center
-local DIST_SIZE = 9
+local DIST_SIZE = 16
 -- The selected (super-tracked) marker is at least this many bar heights
 -- tall and isn't clipped, so it pokes out above and below the bar.
 local SELECTED_POP = 1.4
@@ -20,10 +19,10 @@ function ns:SelectedPopHeight()
     return ns.db.height * SELECTED_POP
 end
 
--- Distance label offset for a marker of `size`: below the icon when it's
--- taller than the bar.
+-- Distance label offset for a marker of `size`: its top sits 4px under the
+-- icon's bottom edge (labels anchor TOP at this offset).
 local function DistY(size)
-    return math.min(DIST_Y, -size / 2 - 4)
+    return -size / 2 - 4
 end
 
 local GetPOITextureCoords = (C_Minimap and C_Minimap.GetPOITextureCoords) or _G.GetPOITextureCoords
@@ -37,7 +36,7 @@ local function CreateMarker()
     -- Distance text lives on the main frame (not the clip) so it can hang
     -- below the strip line without being clipped.
     m.dist = ns.frame:CreateFontString(nil, "OVERLAY")
-    m.dist:SetFont(T.fonts.main, DIST_SIZE, "")
+    m.dist:SetFont(T.fonts.main, DIST_SIZE, "OUTLINE")
     m.dist:SetTextColor(unpack(T.colors.textDim))
     return m
 end
@@ -252,7 +251,7 @@ function ns:UpdateMarkers()
             m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
             m.dist:ClearAllPoints()
             if not atEdge then
-                m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
+                m.dist:SetPoint("TOP", ns.frame, "CENTER", x, m._distY)
                 m.dist:Show()
             end
         else
@@ -283,7 +282,7 @@ function ns:UpdateMarkers()
         local x = side * ns:EdgeHalfWidth(w / 2 + EDGE_PAD + off)
         m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
         if db.showDistance then
-            m.dist:SetPoint("CENTER", ns.frame, "CENTER", x, m._distY)
+            m.dist:SetPoint("TOP", ns.frame, "CENTER", x, m._distY)
             m.dist:Show()
         end
     end
