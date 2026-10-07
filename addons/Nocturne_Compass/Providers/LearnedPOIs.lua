@@ -651,7 +651,18 @@ local function ResetPin(pool, pin)
     if pin.OnReleased then pin:OnReleased() end
 end
 
+-- WoW Forever, gamepad interface: closing the world map (Esc or the map
+-- key -> HideUIPanel) raised ADDON_ACTION_FORBIDDEN for
+-- SetPreferredGamepadInteractTarget blamed on Nocturne_Compass, and froze
+-- the client on "Ignore". taint.log: execution picks up our taint in
+-- Blizzard_MapCanvas (OnHide walking currentPoIPins, the dataProviders
+-- loop), then the gamepad's FrameHidden -> UpdateInteractIcons runs
+-- tainted. No world map pins on Forever: its interface can turn Gamepad
+-- at any time after the provider attached.
+local IS_FOREVER = _G.Nocturne.IS_FOREVER
+
 local function EnsureMapProvider()
+    if IS_FOREVER then return end
     if mapProvider or not (WorldMapFrame and WorldMapFrame.AddDataProvider
             and MapCanvasDataProviderMixin and CreateFromMixins and CreateFramePool) then
         return
@@ -697,12 +708,11 @@ local function EnsureMapProvider()
     WorldMapFrame:AddDataProvider(mapProvider)
 end
 
--- The world map loads on demand; the provider attaches once it exists.
-if WorldMapFrame then
-    EnsureMapProvider()
-end
+-- The world map loads on demand; the provider attaches once it exists
+-- and the player is in the world.
+_G.Nocturne.RegisterEvent("PLAYER_ENTERING_WORLD", EnsureMapProvider)
 _G.Nocturne.RegisterEvent("ADDON_LOADED", function(_, name)
-    if name == "Blizzard_WorldMap" then EnsureMapProvider() end
+    if name == "Blizzard_WorldMap" and IsLoggedIn() then EnsureMapProvider() end
 end)
 -- Pins follow the tracking menu; toggling a filter with the map open
 -- redraws them.

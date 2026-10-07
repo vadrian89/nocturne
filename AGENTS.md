@@ -191,6 +191,16 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   `securecallfunction`), so on Forever `Builder:Dropdown` is a slider.
   *(Unverified fix.)* Closing the Settings panel also raises it for other
   addons (seen for BugSack) — not Nocturne-specific.
+- An addon world-map data provider (pin pool on `WorldMapFrame`) taints
+  closing the map: Esc → `CloseWindows` → `HideUIPanel` → gamepad
+  `FrameHidden` → `GamepadMainActionBarFrame:UpdateInteractIcons` →
+  `SetPreferredGamepadInteractTarget` FORBIDDEN, blamed on the provider's
+  addon; "Ignore" froze the client. Proven with taint.log: the taint is
+  picked up in `Blizzard_MapCanvas` (OnHide's `currentPoIPins` loop, the
+  `dataProviders` loop), and also spreads to the gamepad bars (pressing a
+  bar button got `SpellStopCasting`/`SpellStopTargeting`/`ClearTarget`
+  blocked). `LearnedPOIs.lua` attaches no provider on Forever.
+  *(Unverified fix.)*
 
 ## Conventions
 

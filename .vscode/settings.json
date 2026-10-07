@@ -13,5 +13,11 @@
     },
     "Lua.workspace.library": [
         "/home/vadrian/.devin/extensions/ketho.wow-api-0.22.3/Annotations/Core"
+    ],
+    "Lua.diagnostics.globals": [
+        "PowerBarColor",
+        "InputUtil",
+        "CopyTable",
+        "GetCVarBool"
     ]
 }
