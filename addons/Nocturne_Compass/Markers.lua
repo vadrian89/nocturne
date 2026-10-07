@@ -132,6 +132,10 @@ local edgeMax = { { [-1] = {}, [1] = {} }, { [-1] = {}, [1] = {} } }
 local edgeOff = { [-1] = {}, [1] = {} }
 local edgeUsed = { [-1] = 0, [1] = 0 }
 
+-- Distance labels are anchored in a final pass so markers sharing a spot
+-- (e.g. a quest pin plus its map pin) print one number, not a stack.
+local distList = {}
+
 -- Anchor points define the clip's size lazily; GetWidth() can briefly read 0
 -- before the layout engine resolves it (e.g. right after login/reload), so
 -- fall back to the configured bar width instead of clamping everything to
@@ -169,6 +173,7 @@ function ns:UpdateMarkers()
     -- Flying over a POI on a flight path isn't "arriving": no glow/banner.
     local onTaxi = UnitOnTaxi and UnitOnTaxi("player") or false
     local edgeN = 0
+    local distN = 0
     wipe(edgeMax[1][-1])
     wipe(edgeMax[1][1])
     wipe(edgeMax[2][-1])
@@ -254,12 +259,20 @@ function ns:UpdateMarkers()
         end
 
         if db.showDistance then
+            -- The selected marker's distance reads 2pt larger.
+            local wantSize = e.isSuperTracked and DIST_SIZE + 2 or DIST_SIZE
+            if m._distSize ~= wantSize then
+                m._distSize = wantSize
+                m.dist:SetFont(T.fonts.main, wantSize, "OUTLINE")
+            end
             m.dist:SetText(BreakUpLargeNumbers(math.floor(dist + 0.5)))
             m.dist:SetAlpha((atEdge and not e.isSuperTracked) and EDGE_ALPHA or 1)
             m.dist:ClearAllPoints()
+            m._distST = e.isSuperTracked or false
             if not atEdge then
-                m.dist:SetPoint("TOP", ns.frame, "CENTER", x, m._distY)
-                m.dist:Show()
+                m._distX = x
+                distN = distN + 1
+                distList[distN] = m
             end
         else
             m.dist:Hide()
@@ -289,7 +302,40 @@ function ns:UpdateMarkers()
         local x = side * ns:EdgeHalfWidth(w / 2 + EDGE_PAD + off)
         m:SetPoint("CENTER", ns.clip, "CENTER", x / m:GetScale(), 0)
         if db.showDistance then
-            m.dist:SetPoint("TOP", ns.frame, "CENTER", x, m._distY)
+            m._distX = x
+            distN = distN + 1
+            distList[distN] = m
+        end
+    end
+
+    -- Distance labels: one per spot. Two markers colliding at (nearly) the
+    -- same position would print the number twice, stacked; the
+    -- super-tracked marker wins.
+    for i = 1, distN do
+        local a = distList[i]
+        if not a._distDead then
+            for j = i + 1, distN do
+                local b = distList[j]
+                if not b._distDead
+                    and math.abs(b._distX - a._distX) < 24
+                    and math.abs(b._distY - a._distY) < DIST_SIZE + 6 then
+                    if b._distST and not a._distST then
+                        a._distDead = true
+                        break
+                    end
+                    b._distDead = true
+                end
+            end
+        end
+    end
+    for i = 1, distN do
+        local m = distList[i]
+        distList[i] = nil
+        if m._distDead then
+            m._distDead = nil
+            m.dist:Hide()
+        else
+            m.dist:SetPoint("TOP", ns.frame, "CENTER", m._distX, m._distY)
             m.dist:Show()
         end
     end
@@ -324,9 +370,10 @@ function ns:ApplyBanner()
     local db = ns.db
     local y = -db.height / 2 - 4
     if db.showDistance then
-        -- Clear the largest the selected marker can get (close + max scale).
+        -- Clear the largest the selected marker can get (close + max
+        -- scale) and its 2pt-larger distance label.
         local selectedMax = math.max(db.height * SELECTED_POP, MARKER_SIZE * db.maxScale * SELECTED_SCALE)
-        y = math.min(y, DistY(selectedMax) - DIST_SIZE)
+        y = math.min(y, DistY(selectedMax) - DIST_SIZE - 2)
     end
     banner:SetFont(T.fonts.main, db.bannerSize, "OUTLINE")
     banner:ClearAllPoints()
