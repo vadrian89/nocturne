@@ -81,11 +81,18 @@ local function ApplyIcon(m, entry)
         drawn = false
     end
 
+    -- Non-selected markers render as white silhouettes; only the
+    -- super-tracked one keeps its icon colors.
+    m.icon:SetDesaturated(drawn and not entry.isSuperTracked)
     if not drawn then
-        local c = T.colors.accent
+        local c = entry.isSuperTracked and T.colors.accent or T.colors.text
         m.icon:SetVertexColor(c[1], c[2], c[3], 1)
-    else
+    elseif entry.isSuperTracked then
         m.icon:SetVertexColor(1, 1, 1, 1)
+    else
+        -- Vertex colors above 1 overbrighten: pushes the desaturated icon
+        -- towards white.
+        m.icon:SetVertexColor(1.6, 1.6, 1.6, 1)
     end
 
     -- Edge stacking order (above the drum): open < completed < super-tracked.
