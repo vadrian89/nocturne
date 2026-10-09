@@ -71,29 +71,7 @@ ns.JournalMargin = MARGIN
 ns.JournalGap = GAP
 
 
--- Page 3: Inventory — bags left, equipment right.
-ns.RegisterPage(3, {
-    key = "inventory",
-    title = "Inventory",
-    Build = function(f)
-        local bags = Panel(f, "inventory", "QuestBG-Parchment")
-        bags:SetPoint("TOPLEFT", MARGIN, -MARGIN)
-        bags:SetPoint("BOTTOMLEFT", MARGIN, MARGIN)
-        local equip = Panel(f, "inventory", "QuestBG-Parchment")
-        equip:SetPoint("TOPRIGHT", -MARGIN, -MARGIN)
-        equip:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
-        equip:SetPoint("LEFT", bags, "RIGHT", GAP, 0)
-
-        ComingSoon(bags, "Bags", PARCHMENT_TEXT)
-        ComingSoon(equip, "Equipment", PARCHMENT_TEXT)
-
-        local function Layout()
-            bags:SetWidth(math.floor(f:GetWidth() * 0.55) - GAP)
-        end
-        Layout()
-        f:SetScript("OnSizeChanged", Layout)
-    end,
-})
+-- Page 3 lives in Pages/Inventory.lua.
 
 -- Page 4: Abilities — one sub-page per spellbook skill line, cycled by
 -- LT/RT. Background halves from Blizzard_SpellBookFrame.xml.

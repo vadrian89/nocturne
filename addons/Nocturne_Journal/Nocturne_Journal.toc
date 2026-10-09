@@ -20,5 +20,6 @@ Shell.lua
 Pages.lua
 QuestArchive.lua
 Pages\Quests.lua
+Pages\Inventory.lua
 Binding.lua
 Options.lua

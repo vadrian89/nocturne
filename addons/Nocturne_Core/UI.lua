@@ -42,8 +42,12 @@ function Nocturne.ShowCopyText(title, text)
     frame.title:SetText(title or "Copy")
     frame.editBox:SetText(text or "")
     frame:Show()
-    frame.editBox:SetFocus()
-    frame.editBox:HighlightText()
+    -- SetFocus walks into the native gamepad FrameControlsManager, whose
+    -- protected calls are refused when an addon triggered the focus.
+    if not Nocturne.GamepadUI() then
+        frame.editBox:SetFocus()
+        frame.editBox:HighlightText()
+    end
 end
 
 -- Keeps a Blizzard frame hidden while `want()` is true. Such frames re-show
@@ -90,6 +94,7 @@ function Nocturne.NewSuppressor(getFrame, want)
             end
         end
     end
+
     return s
 end
 

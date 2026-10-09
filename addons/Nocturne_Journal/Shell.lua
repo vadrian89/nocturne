@@ -159,6 +159,9 @@ function ns:CreateShell()
     c:SetScript("OnHide", function()
         c.onConfirm = nil
         if ns.modal == c then ns.modal = nil end
+        -- Not at once: the confirming press is still down and its release
+        -- would hit the freshly rebound PAD1.
+        C_Timer.After(0.4, function() ns:UpdatePadMode() end)
     end)
     c:Hide()
 
@@ -169,12 +172,7 @@ function ns:CreateShell()
     -- is restricted. Counters prove in diag that buttons reach us.
     f:EnableGamePadButton(true)
     f:SetScript("OnGamePadButtonDown", function(_, button) ns:OnPadButton(button) end)
-    f:SetScript("OnGamePadButtonUp", function(_, button)
-        local def = ns.pages[ns.current]
-        if def and def.OnPadUp then
-            def.OnPadUp(ns.pageFrames[ns.current], button)
-        end
-    end)
+    f:SetScript("OnGamePadButtonUp", function(_, button) ns:OnPadButtonUp(button) end)
     if f.EnableGamePadStick then f:EnableGamePadStick(true) end
     ns.stickCounts = {}
     f:SetScript("OnGamePadStick", function(_, stick, x, y)
@@ -297,6 +295,7 @@ function ns:SetPage(i)
     local def = ns.pages[i]
     if def.OnShow then def.OnShow(pf) end
     if def.OnSubPage then def.OnSubPage(pf, ns.subCurrent) end
+    ns:UpdatePadMode()
     if ns.db and ns.db.rememberPage then ns.db.lastPage = i end
 end
 
@@ -307,6 +306,7 @@ function ns:SetSubPage(i)
     ns.subCurrent = i
     local def = ns.pages[ns.current]
     if def and def.OnSubPage then def.OnSubPage(ns.pageFrames[ns.current], i) end
+    ns:UpdatePadMode()
     ns:UpdateSubBar()
 end
 
@@ -340,6 +340,7 @@ function ns:OnShellHide()
         end
         ns.current = 0
     end
+    ns:UpdatePadMode()
 end
 
 -- Centered yes/no dialog. A confirms, B/Back cancels; click works too.
@@ -353,7 +354,65 @@ function ns:ShowConfirm(text, confirmLabel, onConfirm)
     c.onConfirm = onConfirm
     ns.modal = c
     c:Show()
+    ns:UpdatePadMode()
 end
+
+function ns:OnPadButtonUp(button)
+    local def = ns.pages[ns.current]
+    if def and def.OnPadUp then
+        def.OnPadUp(ns.pageFrames[ns.current], button)
+    end
+end
+
+-- Pad "bind mode". While the shell frame has EnableGamePadButton on, every
+-- press is consumed by OnGamePadButtonDown and never reaches the keybinding
+-- dispatcher (SetPropagateKeyboardInput is keyboard-only), so a secure
+-- button can't be clicked from the pad. A page that needs that
+-- (def.PadBind) switches the shell to override bindings instead: PAD1 clicks
+-- the page's secure button, every other key clicks a forwarding button that
+-- feeds the same OnPadButton/OnPadButtonUp handlers. Frames keep the pad
+-- sticks either way.
+local PAD_KEYS = {
+    "PAD2", "PAD3", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT",
+    "PADLSHOULDER", "PADRSHOULDER", "PADLTRIGGER", "PADRTRIGGER", "PADBACK",
+}
+local padOwner = CreateFrame("Frame")
+for _, key in ipairs(PAD_KEYS) do
+    local b = CreateFrame("Button", "NocturneJournalPad_" .. key, UIParent)
+    b:SetSize(1, 1)
+    b:SetAlpha(0)
+    b:EnableMouse(false)
+    b:RegisterForClicks("AnyDown", "AnyUp")
+    b:SetScript("OnClick", function(_, _, down)
+        if not (ns.frame and ns.frame:IsShown()) then return end
+        local k = "bind:" .. key
+        ns.padCounts[k] = (ns.padCounts[k] or 0) + 1
+        if down then ns:OnPadButton(key) else ns:OnPadButtonUp(key) end
+    end)
+end
+
+function ns:UpdatePadMode()
+    if not ns.frame or InCombatLockdown() then return end
+    local def = ns.pages[ns.current]
+    local want = ns.frame:IsShown() and def and def.PadBind
+        and not (ns.modal and ns.modal:IsShown())
+        and def.PadBind(ns.pageFrames[ns.current]) and true or false
+    if want == (ns.padBind or false) then return end
+    ns.padBind = want
+    ns.frame:EnableGamePadButton(not want)
+    ClearOverrideBindings(padOwner)
+    if def and def.OnPadReset then def.OnPadReset(ns.pageFrames[ns.current]) end
+    if want then
+        SetOverrideBindingClick(padOwner, true, "PAD1",
+            "NocturneJournalPadUse", "LeftButton")
+        for _, key in ipairs(PAD_KEYS) do
+            SetOverrideBindingClick(padOwner, true, key,
+                "NocturneJournalPad_" .. key, "LeftButton")
+        end
+    end
+end
+
+_G.Nocturne.RegisterEvent("PLAYER_REGEN_ENABLED", function() ns:UpdatePadMode() end)
 
 function ns:OnPadButton(button)
     ns.padCounts[button] = (ns.padCounts[button] or 0) + 1

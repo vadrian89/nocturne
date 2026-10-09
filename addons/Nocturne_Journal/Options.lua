@@ -69,6 +69,14 @@ function ns:DiagText()
             tostring(ns.questUI.selected and ns.questUI.selected.qid),
             tostring(ns.questListDirty)))
     end
+    if ns.invUI then
+        local ub = ns.invUI.useBtn
+        add(("padUse: btn=%s item=%s clicks=%d padBind=%s"):format(
+            tostring(not not ub),
+            ub and tostring(ub:GetAttribute("item")) or "-",
+            ns.invUI.useClicks or 0,
+            tostring(ns.padBind)))
+    end
     return table.concat(L, "\n")
 end
 
