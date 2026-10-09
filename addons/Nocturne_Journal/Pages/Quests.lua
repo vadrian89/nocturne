@@ -600,15 +600,19 @@ function ns:QuestsRefresh()
     -- quest left the log (e.g. just abandoned), clear the selection.
     if ui.selected then
         local found
-        for _, it in ipairs(ui.list.items) do
+        for idx, it in ipairs(ui.list.items) do
             if it.qid == ui.selected.qid then
                 ui.selected = it
+                ui.list:RevealIndex(idx)
                 found = true
                 break
             end
         end
         if not found then ui.selected = nil end
     end
+    -- SetItems repainted with the stale selection table; repaint again so
+    -- the highlight lands on the re-resolved item.
+    ui.list:Refresh()
     ns:QuestShowDetail()
 end
 
