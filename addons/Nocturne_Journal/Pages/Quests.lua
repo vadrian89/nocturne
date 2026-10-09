@@ -432,12 +432,12 @@ ns.RegisterPage(2, {
         ui.done:SetPoint("TOPRIGHT", ui.objs, "BOTTOMRIGHT", 0, -12)
 
         ui.chain = ns.NewList(chainPanel, {
-            rowHeight = 30,
+            rowHeight = 34,
             initRow = function(row) ns.NewListRow(row, true, 14) end,
             setRow = function(row, item)
                 if item.header then
                     row.icon:SetTexture(nil)
-                    row.label:SetFont(T.fonts.main, 14, "OUTLINE")
+                    row.label:SetFont(T.fonts.main, 26, "")
                     row.label:SetText(item.title)
                     row.label:SetTextColor(HEADER_COLOR[1], HEADER_COLOR[2], HEADER_COLOR[3])
                     return
