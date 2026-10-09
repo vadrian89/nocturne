@@ -3,9 +3,11 @@ local _, ns = ...
 local Nocturne = _G.Nocturne
 local T = Nocturne.Theme
 
-local HEADER_H = 42
-local SUBBAR_H = 28
+local HEADER_H = 64
+local SUBBAR_H = 44
 local TAB_PAD = 16
+local TAB_FONT = 26
+local GLYPH_FONT = 20
 
 ns.pages = {}
 ns.pageFrames = {}
@@ -34,7 +36,7 @@ end
 local function CreateTab(parent, index, title, onClick)
     local b = CreateFrame("Button", nil, parent)
     b:SetHeight(parent:GetHeight())
-    b.label = T.CreateFontString(b, 13)
+    b.label = T.CreateFontString(b, TAB_FONT)
     b.label:SetPoint("CENTER")
     b.label:SetText(title)
     b:SetWidth(math.floor(b.label:GetStringWidth() + TAB_PAD * 2))
@@ -50,7 +52,7 @@ local function CreateTab(parent, index, title, onClick)
         if not self.active then SetLabelColor(self.label, T.colors.text) end
     end)
     b:SetScript("OnLeave", function(self)
-        SetLabelColor(self.label, self.active and T.colors.accent or T.colors.textDim)
+        SetLabelColor(self.label, self.active and T.colors.accent or T.colors.text)
     end)
     return b
 end
@@ -102,10 +104,10 @@ function ns:CreateShell()
     local rl = T.colors.border
     h.rule:SetColorTexture(rl[1], rl[2], rl[3], rl[4])
 
-    h.lb = T.CreateFontString(h, 12, T.colors.textDim)
+    h.lb = T.CreateFontString(h, GLYPH_FONT, T.colors.textDim)
     h.lb:SetPoint("LEFT", 16, 0)
     h.lb:SetText(PadGlyph("PADLSHOULDER", "LB"))
-    h.rb = T.CreateFontString(h, 12, T.colors.textDim)
+    h.rb = T.CreateFontString(h, GLYPH_FONT, T.colors.textDim)
     h.rb:SetPoint("RIGHT", -16, 0)
     h.rb:SetText(PadGlyph("PADRSHOULDER", "RB"))
 
@@ -130,10 +132,10 @@ function ns:CreateShell()
     sub.rule:SetPoint("BOTTOMRIGHT")
     sub.rule:SetHeight(1)
     sub.rule:SetColorTexture(rl[1], rl[2], rl[3], rl[4])
-    sub.lt = T.CreateFontString(sub, 12, T.colors.textDim)
+    sub.lt = T.CreateFontString(sub, GLYPH_FONT, T.colors.textDim)
     sub.lt:SetPoint("LEFT", 16, 0)
     sub.lt:SetText(PadGlyph("PADLTRIGGER", "LT"))
-    sub.rt = T.CreateFontString(sub, 12, T.colors.textDim)
+    sub.rt = T.CreateFontString(sub, GLYPH_FONT, T.colors.textDim)
     sub.rt:SetPoint("RIGHT", -16, 0)
     sub.rt:SetText(PadGlyph("PADRTRIGGER", "RT"))
     sub:Hide()
@@ -187,7 +189,7 @@ function ns:UpdateTabs()
     for i, t in ipairs(ns.tabs) do
         t.active = i == ns.current
         t.line:SetShown(t.active)
-        SetLabelColor(t.label, t.active and T.colors.accent or T.colors.textDim)
+        SetLabelColor(t.label, t.active and T.colors.accent or T.colors.text)
     end
 end
 
@@ -218,7 +220,7 @@ function ns:UpdateSubBar()
         t:SetWidth(math.floor(t.label:GetStringWidth() + TAB_PAD * 2))
         t.active = i == ns.subCurrent
         t.line:SetShown(t.active)
-        SetLabelColor(t.label, t.active and T.colors.accent or T.colors.textDim)
+        SetLabelColor(t.label, t.active and T.colors.accent or T.colors.text)
         t:Show()
     end
     for i = #titles + 1, #ns.subTabs do
