@@ -291,7 +291,9 @@ ns.RegisterPage(2, {
         local scroll = CreateFrame("ScrollFrame", nil, right)
         ui.scroll = scroll
         scroll:SetPoint("TOPLEFT")
-        scroll:SetPoint("BOTTOMRIGHT", -28, 0)
+        -- Bottom inset keeps scrolled content clear of the pad legend; the
+        -- panel background still runs to the screen edge.
+        scroll:SetPoint("BOTTOMRIGHT", -28, 44)
         scroll:EnableMouseWheel(true)
         local sbar = CreateFrame("Slider", nil, scroll, "UIPanelScrollBarTemplate")
         ui.sbar = sbar
