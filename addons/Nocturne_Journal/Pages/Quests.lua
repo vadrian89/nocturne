@@ -12,45 +12,6 @@ local HEADER_COLOR = { 0.80, 0.68, 0.42, 1 }
 local DONE_COLOR = { 0.30, 0.75, 0.35, 1 }
 local DIM_COLOR = { 0.60, 0.60, 0.65, 1 }
 
--- TEMPORARY: fake data so scrolling can be tested without a full quest log.
-local MOCK = true
-
-local function MockActiveItems()
-    local items = {}
-    for z = 1, 4 do
-        items[#items + 1] = { header = true, title = ("Mock Zone %d"):format(z) }
-        for i = 1, 8 do
-            items[#items + 1] = {
-                qid = 90000 + z * 100 + i,
-                title = ("Mock Quest %d-%d"):format(z, i),
-                level = 10 + i
-            }
-        end
-    end
-    return items
-end
-
-local function MockText()
-    local t = {}
-    for i = 1, 14 do
-        t[#t + 1] = ("Paragraph %d. Lorem ipsum dolor sit amet, consectetur "
-            .. "adipiscing elit, sed do eiusmod tempor incididunt ut labore "
-            .. "et dolore magna aliqua."):format(i)
-    end
-    return table.concat(t, "\n\n")
-end
-
-local function MockChainItems()
-    local items = { { header = true, title = "The Mock Chain" } }
-    for i = 1, 25 do
-        items[#items + 1] = {
-            title = ("Mock chain step %d"):format(i),
-            chainState = i < 8 and "done" or i == 8 and "active" or "future",
-        }
-    end
-    return items
-end
-
 local function IsWatched(qid)
     for i = 1, C_QuestLog.GetNumQuestWatches() or 0 do
         if C_QuestLog.GetQuestIDForQuestWatchIndex(i) == qid then return true end
@@ -79,7 +40,6 @@ local function WatchAtlas()
 end
 
 local function BuildActiveItems()
-    if MOCK then return MockActiveItems() end
     local items = {}
     for i = 1, C_QuestLog.GetNumQuestLogEntries() do
         local info = C_QuestLog.GetInfo(i)
@@ -661,7 +621,6 @@ function ns:QuestShowDetail()
     else
         desc, objText = LiveText(qid)
     end
-    if MOCK then desc = MockText() end
     ui.desc:SetText(desc or "")
     if ui.desc:GetText() == "" and not snap then
         ui.desc:SetText(objText or "")
@@ -694,7 +653,7 @@ function ns:QuestShowDetail()
 
     -- Chain rows come after `done` inside the scroll child; they also
     -- decide its height.
-    local chainH = ui.RenderChain(MOCK and MockChainItems() or ChainItems(ui, qid, snap))
+    local chainH = ui.RenderChain(ChainItems(ui, qid, snap))
 
     ui.child:SetHeight(math.max(1, 48
         + ui.title:GetStringHeight() + ui.desc:GetStringHeight()
