@@ -60,19 +60,50 @@ local function BuildActiveItems()
     return items
 end
 
+-- Zone name for a quest not in the log (completed/historical): the map
+-- the quest UI pins it to. Cached — called once per quest per session.
+local zoneCache = {}
+local function QuestZone(qid)
+    local c = zoneCache[qid]
+    if c ~= nil then return c or nil end
+    local name
+    local mapID = C_QuestLog.GetQuestUiMapID and C_QuestLog.GetQuestUiMapID(qid)
+    if mapID and mapID > 0 and C_Map and C_Map.GetMapInfo then
+        local info = C_Map.GetMapInfo(mapID)
+        if info and info.name and info.name ~= "" then name = info.name end
+    end
+    zoneCache[qid] = name or false
+    return name
+end
+
+-- Completed tab: same zone/category grouping as the quest log. Archived
+-- quests carry their zone in the snapshot; older snaps and the historical
+-- IDs resolve it through the quest's map.
 local function BuildCompletedItems()
     local items = {}
-    if ns.chardb and #ns.chardb.completed > 0 then
-        items[#items + 1] = { header = true, title = "Completed" }
+    local order, groups = {}, {}
+    local function Add(zone, item)
+        zone = zone or "Unknown"
+        local g = groups[zone]
+        if not g then
+            g = {}
+            groups[zone] = g
+            order[#order + 1] = zone
+        end
+        g[#g + 1] = item
+    end
+    if ns.chardb then
         for _, e in ipairs(ns.chardb.completed) do
-            items[#items + 1] = { qid = e.qid, snap = e }
+            Add(e.zone or QuestZone(e.qid), { qid = e.qid, snap = e })
         end
     end
-    local hist = ns.HistoricalIDs()
-    if #hist > 0 then
-        items[#items + 1] = { header = true, title = "Earlier" }
-        for _, qid in ipairs(hist) do
-            items[#items + 1] = { qid = qid, historical = true }
+    for _, qid in ipairs(ns.HistoricalIDs()) do
+        Add(QuestZone(qid), { qid = qid, historical = true })
+    end
+    for _, zone in ipairs(order) do
+        items[#items + 1] = { header = true, title = zone }
+        for _, it in ipairs(groups[zone]) do
+            items[#items + 1] = it
         end
     end
     return items

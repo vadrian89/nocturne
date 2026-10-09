@@ -30,7 +30,7 @@ function ns.QuestChainInfo(qid, mapID)
     if info then return info.questLineID, info.questLineName, mapID end
 end
 
-local function Snapshot(qid)
+local function Snapshot(qid, zone)
     if not ns.chardb then return end
     local idx = C_QuestLog.GetLogIndexForQuestID(qid)
     if not idx then return end
@@ -51,6 +51,7 @@ local function Snapshot(qid)
     local snap = ns.chardb.pending[qid] or {}
     ns.chardb.pending[qid] = snap
     snap.qid = qid
+    if zone and zone ~= "" then snap.zone = zone end
     if info then
         if info.title then snap.title = info.title end
         snap.level = info.level
@@ -79,11 +80,16 @@ end
 local function SnapshotAll()
     if not ns.chardb then return end
     local seen = {}
+    local zone
     for i = 1, C_QuestLog.GetNumQuestLogEntries() do
         local info = C_QuestLog.GetInfo(i)
-        if info and not info.isHeader and info.questID then
-            seen[info.questID] = true
-            Snapshot(info.questID)
+        if info then
+            if info.isHeader then
+                zone = info.title
+            elseif info.questID then
+                seen[info.questID] = true
+                Snapshot(info.questID, zone)
+            end
         end
     end
     for qid in pairs(ns.chardb.pending) do
