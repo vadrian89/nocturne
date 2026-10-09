@@ -1,4 +1,4 @@
-local _, ns = ...
+local _, ns          = ...
 
 -- WoW Forever's native gamepad bars (Blizzard_GamepadActionBars, loads only
 -- on camelot). Blizzard anchors each action button to its bar's CENTER and
@@ -7,15 +7,15 @@ local _, ns = ...
 -- itself is never re-anchored by Blizzard (only Hide/Show around its edit
 -- frame), so the whole frame is moved and scaled — out of combat only,
 -- since it holds protected children.
-local EDGE   = 16  -- screen edge to the bars' rightmost content (UIParent units)
-local BOT_Y  = 110 -- Blizzard's own BOTTOM offset
+local EDGE           = 16  -- screen edge to the bars' rightmost content (UIParent units)
+local BOT_Y          = 110 -- Blizzard's own BOTTOM offset
 -- Frame is 656 wide. Compact layout (CVar GamepadUseCompactActionBar) stacks
 -- every bar on the bottom anchor at the center, so its content ends ~180
 -- from the center; the cross layout spans the whole frame.
 local HALF_W         = 328
 local COMPACT_HALF_W = 180
 
-local pending = false
+local pending        = false
 
 local function Frame() return _G.GamepadMainActionBarFrame end
 
@@ -73,11 +73,28 @@ function ns:NativeDiagText()
     if not f then return "native bars: GamepadMainActionBarFrame missing" end
     local pu = f.PageUnit
     local point, rel, relPoint, x, y = f:GetPoint(1)
+    local ibm = GamepadSharedUtility and GamepadSharedUtility.InputBindingManager
+    local stack
+    if ibm and ibm.bindingSetStack then
+        stack = {}
+        for i, set in ipairs(ibm.bindingSetStack) do
+            stack[i] = set.name or "?"
+        end
+    end
+    local function PadBound(key)
+        local b = GetBindingByKey and GetBindingByKey(key)
+        return tostring(b)
+    end
     return table.concat({
-        ("native: right=%s scale=%s moved=%s pending=%s shown=%s compact=%s"):format(
+        ("native: right=%s scale=%s moved=%s pending=%s shown=%s alpha=%s compact=%s"):format(
             tostring(ns.db and ns.db.nativeRight), tostring(ns.db and ns.db.nativeScale),
             tostring(ns.nativeMoved), tostring(pending), tostring(f:IsShown()),
-            tostring(IsCompact())),
+            tostring(f:GetAlpha()), tostring(IsCompact())),
+        ("padKeys PAD1=%s PAD2=%s dpadUp=%s"):format(
+            PadBound("PAD1"), PadBound("PAD2"), PadBound("PADDUP")),
+        ("bindingStack: top=%s sets=[%s]"):format(
+            ibm and tostring(ibm:PeekName()) or "n/a",
+            stack and table.concat(stack, ", ") or "?"),
         ("point=%s %s %s %s %s frameScale=%.2f"):format(tostring(point),
             tostring(rel and rel:GetName()), tostring(relPoint), tostring(x), tostring(y),
             f:GetScale()),
