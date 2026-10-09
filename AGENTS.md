@@ -191,6 +191,11 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   `securecallfunction`), so on Forever `Builder:Dropdown` is a slider.
   *(Unverified fix.)* Closing the Settings panel also raises it for other
   addons (seen for BugSack) — not Nocturne-specific.
+- `StaticPopup_Show` from addon code on Forever's native gamepad UI is
+  FORBIDDEN: the popup's OnShow runs `FrameControlsManager.HandlePopupShown`
+  → `SetFallThroughCatcherActive` → binding-set activation →
+  `SetPreferredGamepadInteractTarget` in the addon's name. Journal uses its
+  own confirm modal (`ns:ShowConfirm` in `Shell.lua`).
 - An addon world-map data provider (pin pool on `WorldMapFrame`) taints
   closing the map: Esc → `CloseWindows` → `HideUIPanel` → gamepad
   `FrameHidden` → `GamepadMainActionBarFrame:UpdateInteractIcons` →

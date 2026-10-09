@@ -14,11 +14,20 @@ local function SetBackground(pageKey, tex, ...)
     ns.diagAtlas[pageKey] = atlas or "fallback"
     if atlas and tex.SetAtlas then
         tex:SetAtlas(atlas, false) -- stretched, not atlas-sized
+        local tint = ns.pageBgTint and ns.pageBgTint[pageKey]
+        if tint then tex:SetVertexColor(tint[1], tint[2], tint[3]) end
     else
         local c = T.colors.backdrop
         tex:SetColorTexture(c[1], c[2], c[3], 1)
     end
 end
+
+-- Vertex-color multiply applied only when the atlas resolved (a color
+-- fallback would go near-black). Dark gray paper instead of light parchment.
+ns.pageBgTint = {
+    quests = { 0.35, 0.35, 0.38 },
+    inventory = { 0.35, 0.35, 0.38 },
+}
 
 local function Panel(parent, pageKey, ...)
     local p = CreateFrame("Frame", nil, parent)
@@ -52,38 +61,15 @@ ns.RegisterPage(1, {
     end,
 })
 
--- Page 2: Quests — parchment panels like the NPC quest window.
-ns.RegisterPage(2, {
-    key = "quests",
-    title = "Quests",
-    Build = function(f)
-        local left = Panel(f, "quests", "QuestBG-Parchment")
-        left:SetPoint("TOPLEFT", MARGIN, -MARGIN)
-        left:SetPoint("BOTTOMLEFT", MARGIN, MARGIN)
-        local right = Panel(f, "quests", "QuestBG-Parchment")
-        right:SetPoint("TOPRIGHT", -MARGIN, -MARGIN)
-        right:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
-        right:SetPoint("LEFT", left, "RIGHT", GAP, 0)
-        local chain = Panel(f, "quests", "QuestBG-Parchment")
-        chain:SetPoint("BOTTOMLEFT", right, "BOTTOMLEFT")
-        chain:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT")
-        local textPanel = CreateFrame("Frame", nil, right)
-        textPanel:SetPoint("TOPLEFT")
-        textPanel:SetPoint("TOPRIGHT")
+-- Page 2 lives in Pages/Quests.lua.
 
-        ComingSoon(left, "Quest list", PARCHMENT_TEXT)
-        ComingSoon(textPanel, "Quest text", PARCHMENT_TEXT)
-        ComingSoon(chain, "Quest chain", PARCHMENT_TEXT)
+-- Export the panel helpers the real pages share.
+ns.JournalPanel = Panel
+ns.JournalCenteredText = CenteredText
+ns.JournalParchmentText = PARCHMENT_TEXT
+ns.JournalMargin = MARGIN
+ns.JournalGap = GAP
 
-        local function Layout()
-            left:SetWidth(math.floor(f:GetWidth() * 0.32) - GAP)
-            chain:SetHeight(math.floor(f:GetHeight() * 0.30))
-            textPanel:SetPoint("BOTTOM", chain, "TOP")
-        end
-        Layout()
-        f:SetScript("OnSizeChanged", Layout)
-    end,
-})
 
 -- Page 3: Inventory — bags left, equipment right.
 ns.RegisterPage(3, {
@@ -153,7 +139,7 @@ ns.RegisterPage(4, {
 
         f.subTitle = T.CreateFontString(f, 18, T.colors.accent)
         f.subTitle:SetPoint("TOP", 0, -54)
-        f.hint = T.CreateFontString(f, 13, PARCHMENT_TEXT)
+        f.hint = T.CreateFontString(f, 15, T.colors.textDim)
         f.hint:SetPoint("CENTER")
     end,
     OnSubPage = function(f, i)

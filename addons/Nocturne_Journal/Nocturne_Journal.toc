@@ -5,6 +5,7 @@
 ## Version: 0.1.0
 ## IconTexture: Interface\Icons\INV_Misc_Book_11
 ## SavedVariables: NocturneJournalDB
+## SavedVariablesPerCharacter: NocturneJournalCharDB
 ## Dependencies: Nocturne_Core
 ## OptionalDeps: Blizzard_WorldMap
 ## Category: User Interface
@@ -14,7 +15,10 @@
 
 Init.lua
 DB.lua
+Widgets.lua
 Shell.lua
 Pages.lua
+QuestArchive.lua
+Pages\Quests.lua
 Binding.lua
 Options.lua

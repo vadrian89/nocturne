@@ -20,6 +20,11 @@ end
 -- Midnight (12.0): some values may be "secret" on tainted paths.
 Nocturne.IsSecret = _G.issecretvalue or function() return false end
 
+-- Truthiness of a possibly-secret flag: secret counts as false.
+function Nocturne.Flag(v)
+    return not Nocturne.IsSecret(v) and v and true or false
+end
+
 -- WoW Forever runs the Mainline engine (WOW_PROJECT_ID 1) on interface
 -- 16xxx; the build number is the only flavor signal it exposes.
 local interface = select(4, GetBuildInfo())

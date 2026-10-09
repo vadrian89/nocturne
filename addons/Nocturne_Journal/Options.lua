@@ -50,6 +50,18 @@ function ns:DiagText()
     for i, def in ipairs(ns.pages) do
         add(("  %s: %s"):format(def.title, tostring(ns.diagAtlas[def.key] or "-")))
     end
+    if ns.chardb then
+        local pend = 0
+        for _ in pairs(ns.chardb.pending) do pend = pend + 1 end
+        add(("archive: %d completed, %d pending, %d historical"):format(
+            #ns.chardb.completed, pend, #ns.HistoricalIDs()))
+    end
+    if ns.questUI then
+        add(("quest list: %d rows, selected=%s, dirty=%s"):format(
+            #ns.questUI.list.items,
+            tostring(ns.questUI.selected and ns.questUI.selected.qid),
+            tostring(ns.questListDirty)))
+    end
     return table.concat(L, "\n")
 end
 

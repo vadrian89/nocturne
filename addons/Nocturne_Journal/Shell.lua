@@ -25,6 +25,7 @@ local function PadGlyph(name, fallback)
     if s and s ~= "" and s ~= name then return s end
     return fallback
 end
+ns.PadGlyph = PadGlyph
 
 local function SetLabelColor(label, c)
     label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -136,6 +137,28 @@ function ns:CreateShell()
     sub.rt:SetPoint("RIGHT", -16, 0)
     sub.rt:SetText(PadGlyph("PADRTRIGGER", "RT"))
     sub:Hide()
+
+    -- Own confirm modal: Blizzard's StaticPopup is off-limits here — on
+    -- Forever's native gamepad UI, showing it makes FrameControlsManager
+    -- call SetPreferredGamepadInteractTarget in our name (FORBIDDEN).
+    local c = CreateFrame("Frame", "NocturneJournalConfirm", f)
+    ns.confirm = c
+    c:SetFrameLevel(h:GetFrameLevel() + 20)
+    c:SetSize(480, 150)
+    c:SetPoint("CENTER")
+    T.ApplyBackdrop(c)
+    c:EnableMouse(true)
+    c.title = T.CreateFontString(c, 17, T.colors.text)
+    c.title:SetPoint("TOP", 0, -24)
+    c.title:SetWidth(420)
+    c.title:SetJustifyH("CENTER")
+    c.hint = T.CreateFontString(c, 14, T.colors.textDim)
+    c.hint:SetPoint("BOTTOM", 0, 24)
+    c:SetScript("OnHide", function()
+        c.onConfirm = nil
+        if ns.modal == c then ns.modal = nil end
+    end)
+    c:Hide()
 
     f:SetScript("OnHide", function() ns:OnShellHide() end)
 
@@ -251,6 +274,10 @@ function ns:Toggle()
 end
 
 function ns:OnShellHide()
+    if ns.modal then
+        ns.modal:Hide()
+        ns.modal = nil
+    end
     if ns.current ~= 0 then
         local pf = ns.pageFrames[ns.current]
         local def = ns.pages[ns.current]
@@ -262,8 +289,32 @@ function ns:OnShellHide()
     end
 end
 
+-- Centered yes/no dialog. A confirms, B/Back cancels; click works too.
+function ns:ShowConfirm(text, confirmLabel, onConfirm)
+    local c = ns.confirm
+    if not c then return end
+    c.title:SetText(text)
+    c.hint:SetText(("%s %s      %s %s"):format(
+        PadGlyph("PAD1", "A"), confirmLabel or OKAY or "OK",
+        PadGlyph("PAD2", "B"), CANCEL or "Cancel"))
+    c.onConfirm = onConfirm
+    ns.modal = c
+    c:Show()
+end
+
 function ns:OnPadButton(button)
     ns.padCounts[button] = (ns.padCounts[button] or 0) + 1
+    local m = ns.modal
+    if m and m:IsShown() then
+        if button == "PAD1" then
+            local fn = m.onConfirm
+            m:Hide()
+            if fn then fn() end
+        elseif button == "PAD2" or button == "PADBACK" then
+            m:Hide()
+        end
+        return
+    end
     if button == "PADLSHOULDER" then
         ns:SetPage((ns.current == 0 and 1 or ns.current) - 1)
     elseif button == "PADRSHOULDER" then
