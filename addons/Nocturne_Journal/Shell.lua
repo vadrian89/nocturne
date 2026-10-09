@@ -169,6 +169,12 @@ function ns:CreateShell()
     -- is restricted. Counters prove in diag that buttons reach us.
     f:EnableGamePadButton(true)
     f:SetScript("OnGamePadButtonDown", function(_, button) ns:OnPadButton(button) end)
+    f:SetScript("OnGamePadButtonUp", function(_, button)
+        local def = ns.pages[ns.current]
+        if def and def.OnPadUp then
+            def.OnPadUp(ns.pageFrames[ns.current], button)
+        end
+    end)
     if f.EnableGamePadStick then f:EnableGamePadStick(true) end
     ns.stickCounts = {}
     f:SetScript("OnGamePadStick", function(_, stick, x, y)

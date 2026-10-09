@@ -337,6 +337,21 @@ ns.RegisterPage(2, {
         end
         ns.moveSelection = MoveSelection
 
+        -- Held D-pad keys repeat with a gentle speed ramp: the repeat
+        -- interval eases from 0.22s down to a 0.11s floor over ~1.4s.
+        ui.dpadHold = {}
+        f:SetScript("OnUpdate", function(_, dt)
+            for button, st in pairs(ui.dpadHold) do
+                st.t = st.t + dt
+                st.acc = st.acc + dt
+                local iv = math.max(0.11, 0.22 - st.t * 0.08)
+                if st.acc >= iv then
+                    st.acc = 0
+                    MoveSelection(button == "PADDUP" and -1 or 1)
+                end
+            end
+        end)
+
         -- Pad legend, bottom-right: [X] action  [Y] action  [A] action.
         local legend = CreateFrame("Frame", nil, f)
         legend:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
@@ -549,11 +564,14 @@ ns.RegisterPage(2, {
         ns.questListDirty = true
     end,
     OnPad = function(f, button)
-        if button == "PADDUP" then
-            if ns.moveSelection then ns.moveSelection(-1) end
-            return
-        elseif button == "PADDDOWN" then
-            if ns.moveSelection then ns.moveSelection(1) end
+        if button == "PADDUP" or button == "PADDDOWN" then
+            local ui = ns.questUI
+            if ui and ui.dpadHold then
+                ui.dpadHold[button] = { t = 0, acc = 0 }
+            end
+            if ns.moveSelection then
+                ns.moveSelection(button == "PADDUP" and -1 or 1)
+            end
             return
         end
         local a = ns.questActions
@@ -565,6 +583,10 @@ ns.RegisterPage(2, {
         elseif button == "PAD1" then
             a.super()
         end
+    end,
+    OnPadUp = function(f, button)
+        local ui = ns.questUI
+        if ui and ui.dpadHold then ui.dpadHold[button] = nil end
     end,
     -- Right stick scrolls the whole right page. Stick names vary between
     -- clients ("RightStick", "Camera", "PADRSTICK"); OnUpdate polling
@@ -582,7 +604,11 @@ ns.RegisterPage(2, {
         ns:QuestsRefresh()
     end,
     OnHide = function()
-        if ns.questUI then ns.questUI.selected = nil end
+        local ui = ns.questUI
+        if ui then
+            ui.selected = nil
+            if ui.dpadHold then wipe(ui.dpadHold) end
+        end
     end,
 })
 
