@@ -312,6 +312,11 @@ ns.RegisterPage(2, {
                     C_SuperTrack.SetSuperTrackedQuestID(0)
                 end
             else
+                -- Super-tracking implies watching: a quest you can't see on
+                -- the tracker can't show its nav arrow.
+                if not IsWatched(item.qid) then
+                    C_QuestLog.AddQuestWatch(item.qid)
+                end
                 C_SuperTrack.SetSuperTrackedQuestID(item.qid)
             end
             ns:QuestsRefresh()
