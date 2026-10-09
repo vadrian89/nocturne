@@ -12,6 +12,45 @@ local HEADER_COLOR = { 0.80, 0.68, 0.42, 1 }
 local DONE_COLOR = { 0.30, 0.75, 0.35, 1 }
 local DIM_COLOR = { 0.60, 0.60, 0.65, 1 }
 
+-- TEMPORARY: fake data so scrolling can be tested without a full quest log.
+local MOCK = true
+
+local function MockActiveItems()
+    local items = {}
+    for z = 1, 4 do
+        items[#items + 1] = { header = true, title = ("Mock Zone %d"):format(z) }
+        for i = 1, 8 do
+            items[#items + 1] = {
+                qid = 90000 + z * 100 + i,
+                title = ("Mock Quest %d-%d"):format(z, i),
+                level = 10 + i
+            }
+        end
+    end
+    return items
+end
+
+local function MockText()
+    local t = {}
+    for i = 1, 14 do
+        t[#t + 1] = ("Paragraph %d. Lorem ipsum dolor sit amet, consectetur "
+            .. "adipiscing elit, sed do eiusmod tempor incididunt ut labore "
+            .. "et dolore magna aliqua."):format(i)
+    end
+    return table.concat(t, "\n\n")
+end
+
+local function MockChainItems()
+    local items = { { header = true, title = "The Mock Chain" } }
+    for i = 1, 25 do
+        items[#items + 1] = {
+            title = ("Mock chain step %d"):format(i),
+            chainState = i < 8 and "done" or i == 8 and "active" or "future",
+        }
+    end
+    return items
+end
+
 local function IsWatched(qid)
     for i = 1, C_QuestLog.GetNumQuestWatches() or 0 do
         if C_QuestLog.GetQuestIDForQuestWatchIndex(i) == qid then return true end
@@ -40,6 +79,7 @@ local function WatchAtlas()
 end
 
 local function BuildActiveItems()
+    if MOCK then return MockActiveItems() end
     local items = {}
     for i = 1, C_QuestLog.GetNumQuestLogEntries() do
         local info = C_QuestLog.GetInfo(i)
@@ -246,15 +286,28 @@ ns.RegisterPage(2, {
             x = x + Width(p) + GAPX
         end
 
-        -- Right side: scrollable centered text on top, chain list at bottom.
-        local chainPanel = PANEL(f, "quests", "QuestBG-Parchment")
-        chainPanel:SetPoint("BOTTOMLEFT", right, "BOTTOMLEFT")
-        chainPanel:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT")
-        local textPanel = CreateFrame("Frame", nil, right)
-        ui.textPanel = textPanel
-        textPanel:SetPoint("TOPLEFT")
-        textPanel:SetPoint("TOPRIGHT")
-        textPanel:SetPoint("BOTTOM", chainPanel, "TOP")
+        -- Right side: ONE scrollable page — centered text on top, chain
+        -- rows laid out inside the same scroll child below it.
+        local scroll = CreateFrame("ScrollFrame", nil, right)
+        ui.scroll = scroll
+        scroll:SetPoint("TOPLEFT")
+        scroll:SetPoint("BOTTOMRIGHT", -28, 0)
+        scroll:EnableMouseWheel(true)
+        local sbar = CreateFrame("Slider", nil, scroll, "UIPanelScrollBarTemplate")
+        ui.sbar = sbar
+        sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, -16)
+        sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 16)
+        sbar:SetValueStep(30)
+        sbar:SetObeyStepOnDrag(false)
+        sbar:SetScript("OnValueChanged", function(_, v) scroll:SetVerticalScroll(v) end)
+        scroll:SetScript("OnMouseWheel", function(_, delta)
+            sbar:SetValue(sbar:GetValue() - delta * 60)
+        end)
+        scroll:SetScript("OnScrollRangeChanged", function(_, _, yrange)
+            sbar:SetMinMaxValues(0, math.max(1, yrange or 0))
+            sbar:SetShown((yrange or 0) > 1)
+        end)
+        scroll:SetScript("OnVerticalScroll", function(_, off) sbar:SetValue(off) end)
 
         -- Actions shared by the on-screen buttons and the pad buttons.
         -- Quests that are complete (ready to turn in) can't be tracked.
@@ -421,16 +474,6 @@ ns.RegisterPage(2, {
         ui.list.frame:SetPoint("TOPLEFT", 8, -76)
         ui.list.frame:SetPoint("BOTTOMRIGHT", -4, 8)
 
-        -- Centered quest text, vertically scrollable.
-        local scroll = CreateFrame("ScrollFrame", nil, textPanel)
-        ui.scroll = scroll
-        scroll:SetPoint("TOPLEFT", 48, -48)
-        scroll:SetPoint("BOTTOMRIGHT", -48, 48)
-        scroll:EnableMouseWheel(true)
-        scroll:SetScript("OnMouseWheel", function(self, delta)
-            local max = math.max(0, self:GetVerticalScrollRange())
-            self:SetVerticalScroll(math.min(max, math.max(0, self:GetVerticalScroll() - delta * 30)))
-        end)
         local child = CreateFrame("Frame", nil, scroll)
         scroll:SetScrollChild(child)
         ui.child = child
@@ -453,8 +496,8 @@ ns.RegisterPage(2, {
         ui.done = Text(child:CreateFontString(nil, "OVERLAY"))
         ui.done:SetTextColor(DONE_COLOR[1], DONE_COLOR[2], DONE_COLOR[3], 1)
 
-        ui.title:SetPoint("TOPLEFT")
-        ui.title:SetPoint("TOPRIGHT")
+        ui.title:SetPoint("TOPLEFT", 48, -48)
+        ui.title:SetPoint("TOPRIGHT", -48, -48)
         ui.desc:SetPoint("TOPLEFT", ui.title, "BOTTOMLEFT", 0, -26)
         ui.desc:SetPoint("TOPRIGHT", ui.title, "BOTTOMRIGHT", 0, -26)
         ui.objs:SetPoint("TOPLEFT", ui.desc, "BOTTOMLEFT", 0, -12)
@@ -462,55 +505,78 @@ ns.RegisterPage(2, {
         ui.done:SetPoint("TOPLEFT", ui.objs, "BOTTOMLEFT", 0, -12)
         ui.done:SetPoint("TOPRIGHT", ui.objs, "BOTTOMRIGHT", 0, -12)
 
-        ui.chain = ns.NewList(chainPanel, {
-            rowHeight = 34,
-            initRow = function(row) ns.NewListRow(row, true, 14) end,
-            setRow = function(row, item)
-                if item.header then
-                    row.icon:SetTexture(nil)
-                    row.label:SetFont(T.fonts.main, 26, "")
-                    row.label:SetText(item.title)
-                    row.label:SetTextColor(HEADER_COLOR[1], HEADER_COLOR[2], HEADER_COLOR[3])
-                    return
-                end
-                row.label:SetFont(T.fonts.main, 14, "")
-                row.label:SetText(ns.QuestTitle(item.qid) or ("Quest " .. item.qid))
-                local c = item.chainState == "done" and DONE_COLOR
-                    or item.chainState == "active" and T.colors.accent or DIM_COLOR
-                row.label:SetTextColor(c[1], c[2], c[3])
-                if item.chainState == "done" then
-                    local atlas = Nocturne.FirstAtlas("common-icon-checkmark", "common-icon-checkmark-yellow")
-                    if atlas then row.icon:SetAtlas(atlas) else row.icon:SetTexture(nil) end
-                elseif item.chainState == "active" then
-                    local atlas = Nocturne.FirstAtlas("common-icon-indicator", "QuestNormal")
-                    if atlas then row.icon:SetAtlas(atlas) else row.icon:SetTexture(nil) end
-                else
-                    row.icon:SetTexture(nil)
-                end
-            end,
-            onClick = function(item)
-                if item.header then return end
-                local items = ui.list.items
-                for _, it in ipairs(items) do
-                    if it.qid == item.qid then
-                        ui.selected = it
+        -- Chain steps are plain rows inside the scroll child so the whole
+        -- right side scrolls as one page.
+        ui.chainRows = {}
+        local function SetChainRow(row, item)
+            if item.header then
+                row.icon:SetTexture(nil)
+                row.label:SetFont(T.fonts.main, 26, "")
+                row.label:SetText(item.title)
+                row.label:SetTextColor(HEADER_COLOR[1], HEADER_COLOR[2], HEADER_COLOR[3])
+                return
+            end
+            row.label:SetFont(T.fonts.main, 20, "")
+            row.label:SetText(item.title or ns.QuestTitle(item.qid)
+                or ("Quest " .. tostring(item.qid)))
+            local c = item.chainState == "done" and DONE_COLOR
+                or item.chainState == "active" and T.colors.accent or DIM_COLOR
+            row.label:SetTextColor(c[1], c[2], c[3])
+            if item.chainState == "done" then
+                local atlas = Nocturne.FirstAtlas("common-icon-checkmark", "common-icon-checkmark-yellow")
+                if atlas then row.icon:SetAtlas(atlas) else row.icon:SetTexture(nil) end
+            elseif item.chainState == "active" then
+                local atlas = Nocturne.FirstAtlas("common-icon-indicator", "QuestNormal")
+                if atlas then row.icon:SetAtlas(atlas) else row.icon:SetTexture(nil) end
+            else
+                row.icon:SetTexture(nil)
+            end
+        end
+        local function RenderChain(items)
+            local prev, h = ui.done, 0
+            for i, item in ipairs(items) do
+                local row = ui.chainRows[i]
+                if not row then
+                    row = CreateFrame("Button", nil, child)
+                    row:SetHeight(34)
+                    ns.NewListRow(row, true, 20)
+                    row:SetScript("OnClick", function(self)
+                        local item = self.item
+                        if not item or item.header then return end
+                        for _, it in ipairs(ui.list.items) do
+                            if it.qid == item.qid then
+                                ui.selected = it
+                                ns:QuestShowDetail()
+                                ui.list:Refresh()
+                                return
+                            end
+                        end
+                        -- Not in the lists (e.g. future chain step).
+                        ui.selected = { qid = item.qid, chainOnly = true }
                         ns:QuestShowDetail()
                         ui.list:Refresh()
-                        return
-                    end
+                    end)
+                    ui.chainRows[i] = row
                 end
-                -- Not in the lists (e.g. future chain step): show title only.
-                ui.selected = { qid = item.qid, chainOnly = true }
-                ns:QuestShowDetail()
-                ui.list:Refresh()
-            end,
-        })
-        ui.chain.frame:SetPoint("TOPLEFT", 8, -8)
-        ui.chain.frame:SetPoint("BOTTOMRIGHT", -4, 8)
+                row.item = item
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, i == 1 and -16 or -2)
+                row:SetPoint("RIGHT", child, "RIGHT", -48, 0)
+                SetChainRow(row, item)
+                row:Show()
+                prev = row
+                h = h + 34 + (i == 1 and 16 or 2)
+            end
+            for i = #items + 1, #ui.chainRows do
+                ui.chainRows[i]:Hide()
+                ui.chainRows[i].item = nil
+            end
+            return h
+        end
+        ui.RenderChain = RenderChain
 
         local function Layout()
             left:SetWidth(math.floor(f:GetWidth() * 0.32) - GAP)
-            chainPanel:SetHeight(math.floor(f:GetHeight() * 0.30))
             local w = math.max(10, scroll:GetWidth())
             child:SetWidth(w)
             ns:QuestShowDetail()
@@ -537,6 +603,18 @@ ns.RegisterPage(2, {
         elseif button == "PAD1" then
             a.super()
         end
+    end,
+    -- Right stick scrolls the whole right page. Stick names vary between
+    -- clients ("RightStick", "Camera", "PADRSTICK"); OnUpdate polling
+    -- passes "RightStick" plus the frame dt.
+    OnStick = function(f, stick, x, y, dt)
+        if not (stick and (stick:find("Right") or stick:find("Camera")
+                or stick == "PADRSTICK")) then
+            return
+        end
+        local ui = ns.questUI
+        if not ui or not ui.sbar then return end
+        ui.sbar:SetValue(ui.sbar:GetValue() - y * 1200 * (dt or 0.016))
     end,
     OnShow = function()
         ns:QuestsRefresh()
@@ -566,7 +644,7 @@ function ns:QuestShowDetail()
         ui.desc:SetText("")
         ui.objs:SetText("")
         ui.done:SetText("")
-        ui.chain:SetItems({})
+        ui.RenderChain({})
         ui.child:SetHeight(1)
         return
     end
@@ -581,6 +659,7 @@ function ns:QuestShowDetail()
     else
         desc, objText = LiveText(qid)
     end
+    if MOCK then desc = MockText() end
     ui.desc:SetText(desc or "")
     if ui.desc:GetText() == "" and not snap then
         ui.desc:SetText(objText or "")
@@ -611,11 +690,14 @@ function ns:QuestShowDetail()
         or (not item.chainOnly and ns.Flag(C_QuestLog.IsComplete(qid)))
     ui.done:SetText(isComplete and (_G.QUEST_COMPLETE or "Quest completed") or "")
 
-    ui.child:SetHeight(math.max(1,
-        ui.title:GetStringHeight() + ui.desc:GetStringHeight()
-        + ui.objs:GetStringHeight() + ui.done:GetStringHeight() + 60))
+    -- Chain rows come after `done` inside the scroll child; they also
+    -- decide its height.
+    local chainH = ui.RenderChain(MOCK and MockChainItems() or ChainItems(ui, qid, snap))
 
-    ui.chain:SetItems(ChainItems(ui, qid, snap))
+    ui.child:SetHeight(math.max(1, 48
+        + ui.title:GetStringHeight() + ui.desc:GetStringHeight()
+        + ui.objs:GetStringHeight() + ui.done:GetStringHeight()
+        + chainH + 60))
 end
 
 function ns:QuestsRefresh()

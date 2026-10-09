@@ -46,6 +46,13 @@ function ns:DiagText()
         any = true
     end
     if not any then add("  (nothing received yet)") end
+    add(("stick: api=%s events=%s pollIdx=%s"):format(
+        tostring(not not (C_GamePad and C_GamePad.GetDeviceMappedState)),
+        tostring(ns.stickEvents or false),
+        tostring(ns.stickIdx)))
+    for name, count in pairs(ns.stickCounts or {}) do
+        add(("  %s x%d"):format(name, count))
+    end
     add("atlases:")
     for i, def in ipairs(ns.pages) do
         add(("  %s: %s"):format(def.title, tostring(ns.diagAtlas[def.key] or "-")))

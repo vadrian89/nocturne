@@ -15,20 +15,11 @@ function ns.NewList(parent, o)
     frame:SetClipsChildren(true)
     list.frame = frame
 
-    local bar = CreateFrame("Slider", nil, frame)
-    bar:SetOrientation("VERTICAL")
-    bar:SetWidth(8)
-    bar:SetPoint("TOPRIGHT")
-    bar:SetPoint("BOTTOMRIGHT")
-    bar:SetValueStep(1)
+    local bar = CreateFrame("Slider", nil, frame, "UIPanelScrollBarTemplate")
+    bar:SetPoint("TOPRIGHT", 0, -16)
+    bar:SetPoint("BOTTOMRIGHT", 0, 16)
+    bar:SetValueStep(rowH)
     bar:SetObeyStepOnDrag(false)
-    bar.track = bar:CreateTexture(nil, "BACKGROUND")
-    bar.track:SetAllPoints()
-    bar.track:SetColorTexture(0.5, 0.5, 0.6, 0.15)
-    bar.thumb = bar:CreateTexture(nil, "OVERLAY")
-    bar.thumb:SetWidth(8)
-    bar.thumb:SetColorTexture(0.6, 0.62, 0.72, 0.6)
-    bar:SetThumbTexture(bar.thumb)
     list.bar = bar
 
     local function maxOffset()
@@ -73,8 +64,6 @@ function ns.NewList(parent, o)
         local max = maxOffset()
         bar:SetMinMaxValues(0, math.max(1, max))
         bar:SetValue(self.offset)
-        local vh = frame:GetHeight()
-        bar.thumb:SetHeight(math.max(18, vh * math.min(1, vh / math.max(1, #self.items * rowH))))
         bar:SetShown(max > 0)
     end
 

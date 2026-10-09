@@ -169,6 +169,45 @@ function ns:CreateShell()
     -- is restricted. Counters prove in diag that buttons reach us.
     f:EnableGamePadButton(true)
     f:SetScript("OnGamePadButtonDown", function(_, button) ns:OnPadButton(button) end)
+    if f.EnableGamePadStick then f:EnableGamePadStick(true) end
+    ns.stickCounts = {}
+    f:SetScript("OnGamePadStick", function(_, stick, x, y)
+        ns.stickEvents = true
+        ns.stickCounts[stick or "?"] = (ns.stickCounts[stick or "?"] or 0) + 1
+        local def = ns.pages[ns.current]
+        if def and def.OnStick then
+            def.OnStick(ns.pageFrames[ns.current], stick, x, y)
+        end
+    end)
+    -- Forever's native gamepad UI may swallow OnGamePadStick entirely
+    -- (sticks drive camera/cursor), so poll the mapped stick state while
+    -- the journal is open. Disabled once real stick events arrive.
+    local gp = C_GamePad
+    f:SetScript("OnUpdate", function(_, dt)
+        if ns.stickEvents then return end
+        if not (gp and gp.GetActiveDeviceID and gp.GetDeviceMappedState) then return end
+        local id = gp.GetActiveDeviceID()
+        local state = id and gp.GetDeviceMappedState(id)
+        if not (state and state.sticks) then return end
+        if not ns.stickIdx then
+            for i = 1, #state.sticks do
+                local name = gp.StickIndexToConfigName and gp.StickIndexToConfigName(i)
+                if name and (name:find("Right") or name:find("Camera")) then
+                    ns.stickIdx = i
+                    break
+                end
+            end
+            ns.stickIdx = ns.stickIdx or math.min(2, #state.sticks)
+        end
+        local s = state.sticks[ns.stickIdx]
+        local y = s and s.y or 0
+        if ns.IsSecret(y) then return end
+        if y > -0.15 and y < 0.15 then return end
+        local def = ns.pages[ns.current]
+        if def and def.OnStick then
+            def.OnStick(ns.pageFrames[ns.current], "RightStick", s.x, y, dt)
+        end
+    end)
     f:Hide()
 end
 
