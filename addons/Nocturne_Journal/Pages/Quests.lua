@@ -138,11 +138,18 @@ ns.RegisterPage(2, {
     key = "quests",
     title = "Quests",
     subPages = function() return { "Active", "Completed" } end,
+    ownSubBar = true,
     OnSubPage = function(f, i)
         local ui = ns.questUI
         if not ui then return end
         ui.subIdx = i
         ui.selected = nil
+        for j, b in ipairs(ui.subTabs) do
+            local on = j == i
+            local c = on and HEADER_COLOR or T.colors.text
+            b.label:SetTextColor(c[1], c[2], c[3])
+            b.line:SetShown(on)
+        end
         ns:QuestsRefresh()
     end,
     Build = function(f)
@@ -157,6 +164,56 @@ ns.RegisterPage(2, {
         right:SetPoint("TOPRIGHT", -MARGIN, -MARGIN)
         right:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
         right:SetPoint("LEFT", left, "RIGHT", GAP, 0)
+
+        -- Sub-tabs over the list, shrink-wrapped and centered:
+        -- [LT] Active  Completed [RT]
+        local subBar = CreateFrame("Frame", nil, left)
+        subBar:SetPoint("TOP", left, "TOP", 0, -20)
+        subBar:SetHeight(36)
+
+        local lt = T.CreateFontString(subBar, 20, T.colors.textDim)
+        lt:SetText(ns.PadGlyph("PADLTRIGGER", "LT"))
+        local rt = T.CreateFontString(subBar, 20, T.colors.textDim)
+        rt:SetText(ns.PadGlyph("PADRTRIGGER", "RT"))
+
+        ui.subTabs = {}
+        local parts = { lt }
+        for i, name in ipairs({ "Active", "Completed" }) do
+            local b = CreateFrame("Button", nil, subBar)
+            b:SetHeight(36)
+            b.label = T.CreateFontString(b, 26)
+            b.label:SetPoint("CENTER")
+            b.label:SetText(name)
+            b:SetWidth(b.label:GetStringWidth() + 8)
+            b.line = b:CreateTexture(nil, "OVERLAY")
+            b.line:SetPoint("BOTTOMLEFT", 4, 3)
+            b.line:SetPoint("BOTTOMRIGHT", -4, 3)
+            b.line:SetHeight(2)
+            local a = T.colors.accent
+            b.line:SetColorTexture(a[1], a[2], a[3], 1)
+            b:SetScript("OnClick", function() ns:SetSubPage(i) end)
+            ui.subTabs[i] = b
+            parts[#parts + 1] = b
+        end
+        parts[#parts + 1] = rt
+
+        local function Width(p)
+            return p.GetStringWidth and p:GetStringWidth() or p:GetWidth()
+        end
+        local GAPX = 18
+        local total = 0
+        for _, p in ipairs(parts) do total = total + Width(p) end
+        total = total + GAPX * (#parts - 1)
+        -- A zero-size frame can leave its children unrendered; give the
+        -- switcher its real rect.
+        subBar:SetSize(math.ceil(total), 36)
+        subBar:SetFrameLevel(left:GetFrameLevel() + 5)
+        local x = -total / 2
+        for _, p in ipairs(parts) do
+            p:ClearAllPoints()
+            p:SetPoint("LEFT", subBar, "CENTER", x, 0)
+            x = x + Width(p) + GAPX
+        end
 
         -- Right side: scrollable centered text on top, chain list at bottom.
         local chainPanel = PANEL(f, "quests", "QuestBG-Parchment")
@@ -330,7 +387,7 @@ ns.RegisterPage(2, {
                 ui.list:Refresh()
             end,
         })
-        ui.list.frame:SetPoint("TOPLEFT", 8, -8)
+        ui.list.frame:SetPoint("TOPLEFT", 8, -76)
         ui.list.frame:SetPoint("BOTTOMRIGHT", -4, 8)
 
         -- Centered quest text, vertically scrollable.
