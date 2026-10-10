@@ -3,7 +3,6 @@ local _, ns = ...
 local Nocturne = _G.Nocturne
 local T = Nocturne.Theme
 
-local PANEL = ns.JournalPanel
 local MARGIN, GAP = ns.JournalMargin, ns.JournalGap
 
 local CELL, CELL_GAP = 44, 6
@@ -758,53 +757,6 @@ end
 -- the use click; instant items never fire these, so the journal stays open.
 local USE_CAST_WINDOW = 1.5
 
--- Character-select style backdrop: the glue scene per race lives at
--- Interface\Glues\Models\UI_<race>\. UnitRace file names differ from the
--- folder names for a few races.
-local RACE_BG_DIR = { Scourge = "UI_Undead" }
-local function RaceScene(f)
-    local _, race = UnitRace("player")
-    local faction = UnitFactionGroup and UnitFactionGroup("player")
-    -- Appended one by one: a nil inside a table constructor would stop ipairs.
-    local candidates = {}
-    if race then
-        candidates[#candidates + 1] = RACE_BG_DIR[race] or ("UI_" .. race)
-    end
-    if faction == "Horde" then
-        candidates[#candidates + 1] = "UI_Orc"
-    elseif faction == "Alliance" then
-        candidates[#candidates + 1] = "UI_Human"
-    end
-    local ok, m = pcall(CreateFrame, "Model", nil, f)
-    if not (ok and m) then
-        ns.diagInvScene = "no Model frame (" .. tostring(m) .. ")"
-        return
-    end
-    m:SetAllPoints(f)
-    local tried = {}
-    for _, dir in ipairs(candidates) do
-        if dir and m.SetModel then
-            local path = ("Interface\\GLUES\\Models\\%s\\%s.m2"):format(dir, dir)
-            local okSet, err = pcall(m.SetModel, m, path)
-            local fid = okSet and m.GetModelFileID and m:GetModelFileID()
-            tried[#tried + 1] = dir .. "=" .. (okSet and ("ok/id=" .. tostring(fid))
-                or tostring(err):sub(1, 60))
-            if okSet and (fid == nil or fid ~= 0) then
-                pcall(m.SetCamera, m, 0)
-                pcall(m.SetSequence, m, 0)
-                local veil = m:CreateTexture(nil, "OVERLAY")
-                veil:SetAllPoints()
-                veil:SetColorTexture(0.02, 0.02, 0.03, 0.72)
-                ns.diagInvScene = ("race=%s -> %s; %s"):format(
-                    tostring(race), dir, table.concat(tried, "; "))
-                return m
-            end
-        end
-    end
-    m:Hide()
-    ns.diagInvScene = ("none (race=%s; %s)"):format(
-        tostring(race), table.concat(tried, "; "))
-end
 local function CloseOnUseCast(_, unit)
     local ui = ns.invUI
     if unit ~= "player" or not (ui and ui.useAt) then return end
@@ -1601,9 +1553,6 @@ ns.RegisterPage(3, {
         ns.invUI = ui
         ui.pageFrame = f
 
-        local scene = RaceScene(f)
-        ui.scene = scene
-
         -- Focus switcher, shrink-wrapped and centered over both panels:
         -- [LT] Bags  Equipped [RT]
         local subBar = CreateFrame("Frame", nil, f)
@@ -1648,17 +1597,13 @@ ns.RegisterPage(3, {
             x = x + Width(p) + GAPX
         end
 
-        local bags = PANEL(f, "inventory", "QuestBG-Parchment")
+        local bags = CreateFrame("Frame", nil, f)
         bags:SetPoint("TOPLEFT", MARGIN, -MARGIN - 44)
         bags:SetPoint("BOTTOMLEFT", MARGIN, MARGIN)
-        local equip = PANEL(f, "inventory", "QuestBG-Parchment")
+        local equip = CreateFrame("Frame", nil, f)
         equip:SetPoint("TOPRIGHT", -MARGIN, -MARGIN - 44)
         equip:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
         equip:SetPoint("LEFT", bags, "RIGHT", GAP, 0)
-        if scene then
-            bags.bg:SetColorTexture(0.03, 0.03, 0.04, 0.62)
-            equip.bg:SetColorTexture(0.03, 0.03, 0.04, 0.62)
-        end
 
         -- Left: bag grid in a native scroll.
         local scroll = CreateFrame("ScrollFrame", nil, bags)

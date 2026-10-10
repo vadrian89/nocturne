@@ -82,7 +82,7 @@ function ns:DiagText()
             tostring(ns.questUI.selected and ns.questUI.selected.qid),
             tostring(ns.questListDirty)))
     end
-    add("invScene: " .. tostring(ns.diagInvScene or "-"))
+    add("scene: " .. tostring(ns.diagScene or "-"))
     if ns.invUI and ns.invUI.sbar then
         local ui = ns.invUI
         local lo, hi = ui.sbar:GetMinMaxValues()

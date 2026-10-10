@@ -26,7 +26,6 @@ end
 -- fallback would go near-black). Dark gray paper instead of light parchment.
 ns.pageBgTint = {
     quests = { 0.35, 0.35, 0.38 },
-    inventory = { 0.35, 0.35, 0.38 },
 }
 
 local function Panel(parent, pageKey, ...)

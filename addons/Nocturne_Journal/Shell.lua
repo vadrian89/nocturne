@@ -87,6 +87,54 @@ local function LayoutTabs(tabs, bar, maxIndex)
     end
 end
 
+-- Character-select style shell backdrop: the glue scene per race lives at
+-- Interface\Glues\Models\UI_<race>\. UnitRace file names differ from the
+-- folder names for a few races.
+local function RaceScene(f)
+    local _, race = UnitRace("player")
+    local faction = UnitFactionGroup and UnitFactionGroup("player")
+    -- Appended one by one: a nil inside a table constructor would stop ipairs.
+    local candidates = {}
+    if race then
+        candidates[#candidates + 1] = "UI_" .. race
+    end
+    if faction == "Horde" then
+        candidates[#candidates + 1] = "UI_Orc"
+    elseif faction == "Alliance" then
+        candidates[#candidates + 1] = "UI_Human"
+    end
+    local ok, m = pcall(CreateFrame, "Model", nil, f)
+    if not (ok and m) then
+        ns.diagScene = "no Model frame (" .. tostring(m) .. ")"
+        return
+    end
+    m:SetAllPoints(f)
+    m:SetFrameLevel(f:GetFrameLevel())
+    local tried = {}
+    for _, dir in ipairs(candidates) do
+        if dir and m.SetModel then
+            local path = ("Interface\\GLUES\\Models\\%s\\%s.m2"):format(dir, dir)
+            local okSet, err = pcall(m.SetModel, m, path)
+            local fid = okSet and m.GetModelFileID and m:GetModelFileID()
+            tried[#tried + 1] = dir .. "=" .. (okSet and ("ok/id=" .. tostring(fid))
+                or tostring(err):sub(1, 60))
+            if okSet and (fid == nil or fid ~= 0) then
+                pcall(m.SetCamera, m, 0)
+                pcall(m.SetSequence, m, 0)
+                local veil = m:CreateTexture(nil, "OVERLAY")
+                veil:SetAllPoints()
+                veil:SetColorTexture(0.02, 0.02, 0.03, 0.72)
+                ns.diagScene = ("race=%s -> %s; %s"):format(
+                    tostring(race), dir, table.concat(tried, "; "))
+                return m
+            end
+        end
+    end
+    m:Hide()
+    ns.diagScene = ("none (race=%s; %s)"):format(
+        tostring(race), table.concat(tried, "; "))
+end
+
 function ns:CreateShell()
     if ns.frame then return end
 
@@ -111,15 +159,7 @@ function ns:CreateShell()
     h:SetPoint("TOPRIGHT")
     h:SetHeight(HEADER_H)
     h:SetFrameLevel(f:GetFrameLevel() + 10)
-    h.bg = h:CreateTexture(nil, "BACKGROUND")
-    h.bg:SetAllPoints()
-    h.bg:SetColorTexture(0.02, 0.03, 0.05, 0.95)
-    h.rule = h:CreateTexture(nil, "ARTWORK")
-    h.rule:SetPoint("BOTTOMLEFT")
-    h.rule:SetPoint("BOTTOMRIGHT")
-    h.rule:SetHeight(1)
     local rl = T.colors.border
-    h.rule:SetColorTexture(rl[1], rl[2], rl[3], rl[4])
 
     h.lb = T.CreateFontString(h, GLYPH_FONT, T.colors.textDim)
     h.lb:SetPoint("LEFT", 16, 0)
@@ -379,6 +419,11 @@ end
 
 function ns:Open(page)
     if not ns.frame then return end
+    -- Built on first open, once the player's race is surely known.
+    if not ns.sceneBuilt then
+        ns.sceneBuilt = true
+        ns.scene = RaceScene(ns.frame)
+    end
     ns.frame:Show()
     ns:SetPage(page or (ns.db and ns.db.rememberPage and ns.db.lastPage) or 1)
     ns:UpdateTabs()
