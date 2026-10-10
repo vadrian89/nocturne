@@ -1487,17 +1487,28 @@ UpdateLegend = function(ui)
     end
     Set(ui.legendL3, ui.focus ~= 1 and "Reset rot" or nil)
     Set(ui.legendR3, ui.focus ~= 1 and "Reset zoom" or nil)
-    -- Navigate hugs the leftmost visible action, or the right edge itself.
-    local nav = ui.legendNav
-    nav:ClearAllPoints()
-    for _, e in ipairs({ ui.legendL3, ui.legendR3, ui.legendB, ui.legendY,
-        ui.legendX, ui.legendA }) do
+    -- Visible entries pack against the right edge (right to left); Navigate
+    -- hugs the leftmost one.
+    local last
+    for _, e in ipairs({ ui.legendA, ui.legendX, ui.legendY, ui.legendB,
+        ui.legendR3, ui.legendL3 }) do
         if e.glyph:IsShown() then
-            nav:SetPoint("RIGHT", e.glyph, "LEFT", -26, 0)
-            return
+            e.label:ClearAllPoints()
+            if last then
+                e.label:SetPoint("RIGHT", last.glyph, "LEFT", -26, 0)
+            else
+                e.label:SetPoint("BOTTOMRIGHT", ui.legend, "BOTTOMRIGHT")
+            end
+            last = e
         end
     end
-    nav:SetPoint("BOTTOMRIGHT", ui.legend, "BOTTOMRIGHT")
+    local nav = ui.legendNav
+    nav:ClearAllPoints()
+    if last then
+        nav:SetPoint("RIGHT", last.glyph, "LEFT", -26, 0)
+    else
+        nav:SetPoint("BOTTOMRIGHT", ui.legend, "BOTTOMRIGHT")
+    end
 end
 
 ns.RegisterPage(3, {
