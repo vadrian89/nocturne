@@ -12,7 +12,7 @@ local SLOT_ATLAS = "bags-item-slot64"
 local QUALITY_FRAME = "Interface\\Common\\WhiteIconFrame"
 local HEADER_H = 30
 local PAD = 40
-local STATS_W = 230
+local STATS_H = 170
 
 local UpdateLegend, SyncUseButton
 
@@ -91,7 +91,10 @@ local function QualityBorder(b, quality)
             return
         end
     end
-    b.q:Hide()
+    -- Neutral gray frame on common/empty slots so they read against the
+    -- dark scene backdrop.
+    b.q:SetVertexColor(0.55, 0.55, 0.58)
+    b.q:Show()
 end
 
 local TIP_SCALE = 1.6
@@ -193,37 +196,51 @@ local STATS = {
     end },
 }
 
+local function StatRow(col, j)
+    local rows = col.rows
+    if not rows then
+        rows = {}
+        col.rows = rows
+    end
+    local r = rows[j]
+    if not r then
+        r = {
+            label = T.CreateFontString(col, 15, DIM_COLOR),
+            value = T.CreateFontString(col, 15, TEXT),
+        }
+        r.label:SetJustifyH("LEFT")
+        r.value:SetJustifyH("RIGHT")
+        local top = -34 - (j - 1) * 22
+        r.label:SetPoint("TOPLEFT", col, "TOPLEFT", 0, top)
+        r.value:SetPoint("TOPRIGHT", col, "TOPRIGHT", 0, top)
+        rows[j] = r
+    end
+    return r
+end
+
 local function RenderStats(ui)
-    local rows = ui.statRows
-    if not rows then return end
-    local n = 0
+    local cols = ui.statCols
+    if not cols then return end
+    local shown = {}
     for _, s in ipairs(STATS) do
         local ok, v = pcall(s[2])
-        if ok and v ~= nil then
-            n = n + 1
-            local r = rows[n]
-            if not r then
-                r = {
-                    label = T.CreateFontString(ui.stats, 15, DIM_COLOR),
-                    value = T.CreateFontString(ui.stats, 15, TEXT),
-                }
-                r.label:SetJustifyH("LEFT")
-                r.value:SetJustifyH("RIGHT")
-                local top = -34 - (n - 1) * 22
-                r.label:SetPoint("TOPLEFT", ui.stats, "TOPLEFT", 0, top)
-                r.value:SetPoint("TOPRIGHT", ui.stats, "TOPRIGHT", 0, top)
-                r.value:SetPoint("LEFT", ui.stats, "LEFT", 120, 0)
-                rows[n] = r
-            end
-            r.label:SetText(s[1])
-            r.value:SetText(tostring(v))
-            r.label:Show()
-            r.value:Show()
-        end
+        if ok and v ~= nil then shown[#shown + 1] = { s[1], tostring(v) } end
     end
-    for i = n + 1, #rows do
-        rows[i].label:Hide()
-        rows[i].value:Hide()
+    local per = math.ceil(#shown / #cols)
+    for i, sv in ipairs(shown) do
+        local ci = math.ceil(i / per)
+        local r = StatRow(cols[ci], i - (ci - 1) * per)
+        r.label:SetText(sv[1])
+        r.value:SetText(sv[2])
+        r.label:Show()
+        r.value:Show()
+    end
+    for ci, col in ipairs(cols) do
+        local used = math.max(0, math.min(per, #shown - (ci - 1) * per))
+        for j = used + 1, #(col.rows or {}) do
+            col.rows[j].label:Hide()
+            col.rows[j].value:Hide()
+        end
     end
 end
 
@@ -364,7 +381,7 @@ local function RenderBags(ui)
                 else
                     b.icon:SetTexture(nil)
                     b.count:SetText("")
-                    b.q:Hide()
+                    QualityBorder(b, nil)
                 end
                 b.bag, b.slot = el.bag, el.slot
                 b.navRow, b.navCol = navRow, j
@@ -481,6 +498,49 @@ end
 -- An item with a cast time (Hearthstone...) starts a player cast right after
 -- the use click; instant items never fire these, so the journal stays open.
 local USE_CAST_WINDOW = 1.5
+
+-- Character-select style backdrop: the glue scene per race lives at
+-- Interface\Glues\Models\UI_<race>\. UnitRace file names differ from the
+-- folder names for a few races.
+local RACE_BG_DIR = { Scourge = "UI_Undead" }
+local function RaceScene(f)
+    local _, race = UnitRace("player")
+    local faction = UnitFactionGroup and UnitFactionGroup("player")
+    local candidates = {
+        race and RACE_BG_DIR[race],
+        race and ("UI_" .. race),
+        faction == "Horde" and "UI_Orc",
+        faction == "Alliance" and "UI_Human",
+    }
+    local ok, m = pcall(CreateFrame, "Model", nil, f)
+    if not (ok and m) then
+        ns.diagInvScene = "no Model frame (" .. tostring(m) .. ")"
+        return
+    end
+    m:SetAllPoints(f)
+    local tried = {}
+    for _, dir in ipairs(candidates) do
+        if dir and m.SetModel then
+            local path = ("Interface\\GLUES\\Models\\%s\\%s.m2"):format(dir, dir)
+            local okSet, err = pcall(m.SetModel, m, path)
+            local fid = okSet and m.GetModelFileID and m:GetModelFileID()
+            tried[#tried + 1] = dir .. "=" .. (okSet and ("ok/id=" .. tostring(fid))
+                or tostring(err):sub(1, 60))
+            if okSet and (fid == nil or fid ~= 0) then
+                pcall(m.SetCamera, m, 0)
+                pcall(m.SetSequence, m, 0)
+                local veil = m:CreateTexture(nil, "OVERLAY")
+                veil:SetAllPoints()
+                veil:SetColorTexture(0.02, 0.02, 0.03, 0.72)
+                ns.diagInvScene = dir
+                return m
+            end
+        end
+    end
+    m:Hide()
+    ns.diagInvScene = "none (fileID=" .. tostring(GetFileIDFromPath) .. "; "
+        .. table.concat(tried, "; ") .. ")"
+end
 local function CloseOnUseCast(_, unit)
     local ui = ns.invUI
     if unit ~= "player" or not (ui and ui.useAt) then return end
@@ -647,6 +707,9 @@ ns.RegisterPage(3, {
         ns.invUI = ui
         ui.pageFrame = f
 
+        local scene = RaceScene(f)
+        ui.scene = scene
+
         -- Focus switcher, shrink-wrapped and centered over both panels:
         -- [LT] Bags  Equipped [RT]
         local subBar = CreateFrame("Frame", nil, f)
@@ -698,6 +761,10 @@ ns.RegisterPage(3, {
         equip:SetPoint("TOPRIGHT", -MARGIN, -MARGIN - 44)
         equip:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
         equip:SetPoint("LEFT", bags, "RIGHT", GAP, 0)
+        if scene then
+            bags.bg:SetColorTexture(0.03, 0.03, 0.04, 0.62)
+            equip.bg:SetColorTexture(0.03, 0.03, 0.04, 0.62)
+        end
 
         -- Left: bag grid in a native scroll.
         local scroll = CreateFrame("ScrollFrame", nil, bags)
@@ -737,31 +804,46 @@ ns.RegisterPage(3, {
         end
         scroll:SetScript("OnSizeChanged", function() ui.UpdateBar() end)
 
-        -- Right: paper-doll columns + player model + weapon row.
+        -- Bottom band: character stats in two columns, below the doll.
+        local stats = CreateFrame("Frame", nil, equip)
+        ui.stats = stats
+        stats:SetPoint("BOTTOMLEFT", equip, "BOTTOMLEFT", PAD, PAD)
+        stats:SetPoint("BOTTOMRIGHT", equip, "BOTTOMRIGHT", -PAD, PAD)
+        stats:SetHeight(STATS_H)
+        local sTitle = T.CreateFontString(stats, 22, HEADER_COLOR)
+        sTitle:SetPoint("TOPLEFT")
+        sTitle:SetText("Stats")
+        ui.statCols = {}
+        local prev
+        for i = 1, 3 do
+            local col = CreateFrame("Frame", nil, stats)
+            if prev then
+                col:SetPoint("TOPLEFT", prev, "TOPRIGHT", 16, 0)
+            else
+                col:SetPoint("TOPLEFT")
+            end
+            col:SetPoint("BOTTOM")
+            ui.statCols[i] = col
+            prev = col
+        end
+        stats:SetScript("OnSizeChanged", function(_, w)
+            local cw = math.max(40, (w - 32) / 3)
+            for _, col in ipairs(ui.statCols) do col:SetWidth(cw) end
+        end)
+
         local ok, model = pcall(CreateFrame, "PlayerModel", nil, equip)
         if ok and model then
             ui.model = model
             model:SetPoint("TOP", 0, -40)
-            model:SetPoint("BOTTOM", 0, 90)
+            model:SetPoint("BOTTOM", stats, "TOP", 0, 80)
             model:SetPoint("LEFT", equip, "LEFT", 100, 0)
-            model:SetPoint("RIGHT", equip, "RIGHT", -100 - STATS_W, 0)
+            model:SetPoint("RIGHT", equip, "RIGHT", -100, 0)
             model:SetAlpha(0.9)
             pcall(function() model:SetUnit("player") end)
             ui.modelYaw = 0
             ui.modelPitch = 0
             ui.modelZoom = 1
         end
-
-        -- Right column: character stats, refreshed with the equipment.
-        local stats = CreateFrame("Frame", nil, equip)
-        ui.stats = stats
-        ui.statRows = {}
-        stats:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD)
-        stats:SetPoint("BOTTOMRIGHT", equip, "BOTTOMRIGHT", -PAD, PAD)
-        stats:SetWidth(STATS_W)
-        local sTitle = T.CreateFontString(stats, 22, HEADER_COLOR)
-        sTitle:SetPoint("TOPLEFT")
-        sTitle:SetText("Stats")
 
         local function EquipCell(slotID, slotName)
             local b = NewCell(equip)
@@ -795,13 +877,13 @@ ns.RegisterPage(3, {
         for i, s in ipairs(EQUIP_RIGHT) do
             local b = EquipCell(s[1], s[2])
             b.tipAnchor = "ANCHOR_LEFT"
-            b:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD - STATS_W - 16, -PAD - (i - 1) * 78)
+            b:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD - (i - 1) * 78)
             NavEquip(b, i, 2)
         end
         for i, s in ipairs(EQUIP_BOTTOM) do
             local b = EquipCell(s[1], s[2])
             b.tipAnchor = "ANCHOR_TOP"
-            b:SetPoint("BOTTOM", equip, "BOTTOM", (i - 2) * 66 - (STATS_W / 2), PAD)
+            b:SetPoint("BOTTOM", stats, "TOP", (i - 2) * 66, 16)
             NavEquip(b, 9, i)
         end
 
@@ -860,7 +942,7 @@ ns.RegisterPage(3, {
         end)
 
         local function Layout()
-            bags:SetWidth(math.floor(f:GetWidth() * 0.5) - GAP)
+            bags:SetWidth(math.floor(f:GetWidth() * 0.4) - GAP)
             child:SetWidth(math.max(10, scroll:GetWidth()))
             RenderBags(ui)
         end
