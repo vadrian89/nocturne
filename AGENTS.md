@@ -67,6 +67,11 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   assignment) silently truncates to one value — `and`/`or` always collapse
   to a single result even when the right operand returns multiple. Guard
   with an `if`, don't rely on `and` to short-circuit a multi-return call.
+- A FontString anchored `TOPLEFT`/`LEFT` + `RIGHT` with MISMATCHED y values
+  is over-constrained: the mid-y pins collapse the rect and the text never
+  renders (Abilities page, invisible spell list + detail). Give the second
+  anchor the same y, use a single anchor, or fix the box with
+  `TOPLEFT` + `BOTTOMRIGHT`.
 - A bare `return` (or falling off the end) returns NO values, not `nil`:
   `tostring(f())` then errors "bad argument #1 to 'tostring' (value
   expected)". Helpers whose result goes straight into a call should end

@@ -120,6 +120,26 @@ function ns:DiagText()
         add(("chord: sig=%q applies=%d bindClicks=%d"):format(
             ns.chordSig or "", ns.chordApplies or 0, ns.bindClicks or 0))
     end
+    if ns.abUI then
+        local ui = ns.abUI
+        add(("abilities: tab=%s items=%d selected=%s"):format(
+            tostring(ui.tab and ui.tab.name),
+            ui.items and #ui.items or -1,
+            tostring(ui.selected and ui.selected.info
+                and ui.selected.info.name)))
+        local function Box(f)
+            if not f then return "-" end
+            return ("L%.0f R%.0f T%.0f B%.0f"):format(
+                f:GetLeft() or -1, f:GetRight() or -1,
+                f:GetTop() or -1, f:GetBottom() or -1)
+        end
+        add(("abBox: left[%s] vis=%s right[%s] list[%s] rows=%d row1[%s]"):format(
+            Box(ui.left), tostring(ui.left and ui.left:IsVisible()),
+            Box(ui.right), Box(ui.list and ui.list.frame),
+            ui.list and #ui.list.rows or -1,
+            Box(ui.list and ui.list.rows[1])))
+        add("abBoxSnapshot(0.3s after show): " .. tostring(ui.boxSnap))
+    end
     if ns.invUI then
         local ub = ns.invUI.useBtn
         add(("padUse: btn=%s item=%s clicks=%d padBind=%s"):format(
