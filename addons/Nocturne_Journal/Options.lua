@@ -39,6 +39,11 @@ function ns:DiagText()
     else
         add("map keys: " .. (#ns.diagMapKeys > 0 and table.concat(ns.diagMapKeys, ", ") or "none bound"))
     end
+    for _, k in ipairs({ "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADLTRIGGER", "PADLSHOULDER" }) do
+        local raw = GetBindingText and GetBindingText(k)
+        add(("glyph %s: raw=[%s] used=[%s]"):format(k,
+            tostring(raw):gsub("|", "||"), tostring(ns.PadGlyph(k)):gsub("|", "||")))
+    end
     add("pad input:")
     local any
     for button, count in pairs(ns.padCounts) do

@@ -21,11 +21,28 @@ function ns.RegisterPage(index, def)
     ns.pages[index] = def
 end
 
--- Binding text for a pad button; on gamepad it can come back as icon markup.
+-- Binding text for a pad button. The client's markup uses the "Generic"
+-- atlases (Gamepad_Gen_1_64...) whose face buttons are drawn as 1/2/3/4, so
+-- the letter-style set (Gamepad_Ltr_A_64...) is swapped in when it exists.
+local FACE = { PAD1 = "A", PAD2 = "B", PAD3 = "X", PAD4 = "Y" }
+local function AtlasExists(markup)
+    local atlas = markup:match("|A:([^:|]+)")
+    return atlas and C_Texture and C_Texture.GetAtlasInfo
+        and C_Texture.GetAtlasInfo(atlas) ~= nil
+end
 local function PadGlyph(name, fallback)
     local s = GetBindingText and GetBindingText(name)
-    if s and s ~= "" and s ~= name then return s end
-    return fallback
+    if s and (s:find("|T") or s:find("|A")) then
+        if s:find("Gamepad_Gen_") then
+            local face = FACE[name]
+            local ltr = face and s:gsub("Gamepad_Gen_%d_", "Gamepad_Ltr_" .. face .. "_")
+                or s:gsub("Gamepad_Gen_", "Gamepad_Ltr_")
+            if AtlasExists(ltr) then return ltr end
+            if face then return face end
+        end
+        return s
+    end
+    return FACE[name] or fallback
 end
 ns.PadGlyph = PadGlyph
 
