@@ -128,6 +128,16 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   is assumed x = depth, y = horizontal, z = vertical. LT/RT switch the
   sub-page on release (skipped if a modifier use happened while held).
 
+- Journal inventory race backdrop (`RaceScene`): the glue scene is
+  `Interface\GLUES\Models\UI_<race>\UI_<race>.m2` (UnitRace token;
+  Scourge -> `UI_Undead`). Proven in-game on Forever: Undead, Orc, Tauren,
+  Troll, Skyborne, Human, Dwarf, Night Elf, Gnome. Other races are untested.
+  `{nil, "x"}` stops `ipairs` at once — a nil first candidate once skipped
+  every race but Scourge; append candidates instead.
+- *(Unverified fix.)* The journal's `PlayerModel` is refreshed with
+  `RefreshUnit` on `PLAYER_EQUIPMENT_CHANGED` / `UNIT_MODEL_CHANGED`
+  (player); without it the model keeps showing the old gear.
+
 ## DRY
 
 - Never duplicate logic across addons — shared behavior (logging, theming,

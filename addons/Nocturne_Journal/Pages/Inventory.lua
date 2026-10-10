@@ -765,12 +765,16 @@ local RACE_BG_DIR = { Scourge = "UI_Undead" }
 local function RaceScene(f)
     local _, race = UnitRace("player")
     local faction = UnitFactionGroup and UnitFactionGroup("player")
-    local candidates = {
-        race and RACE_BG_DIR[race],
-        race and ("UI_" .. race),
-        faction == "Horde" and "UI_Orc",
-        faction == "Alliance" and "UI_Human",
-    }
+    -- Appended one by one: a nil inside a table constructor would stop ipairs.
+    local candidates = {}
+    if race then
+        candidates[#candidates + 1] = RACE_BG_DIR[race] or ("UI_" .. race)
+    end
+    if faction == "Horde" then
+        candidates[#candidates + 1] = "UI_Orc"
+    elseif faction == "Alliance" then
+        candidates[#candidates + 1] = "UI_Human"
+    end
     local ok, m = pcall(CreateFrame, "Model", nil, f)
     if not (ok and m) then
         ns.diagInvScene = "no Model frame (" .. tostring(m) .. ")"
@@ -791,14 +795,15 @@ local function RaceScene(f)
                 local veil = m:CreateTexture(nil, "OVERLAY")
                 veil:SetAllPoints()
                 veil:SetColorTexture(0.02, 0.02, 0.03, 0.72)
-                ns.diagInvScene = dir
+                ns.diagInvScene = ("race=%s -> %s; %s"):format(
+                    tostring(race), dir, table.concat(tried, "; "))
                 return m
             end
         end
     end
     m:Hide()
-    ns.diagInvScene = "none (fileID=" .. tostring(GetFileIDFromPath) .. "; "
-        .. table.concat(tried, "; ") .. ")"
+    ns.diagInvScene = ("none (race=%s; %s)"):format(
+        tostring(race), table.concat(tried, "; "))
 end
 local function CloseOnUseCast(_, unit)
     local ui = ns.invUI
@@ -955,6 +960,32 @@ local function ResetModel(ui)
     ui.modelYaw, ui.modelZoom, ui.modelPanX, ui.modelPanY = 0, 1, 0, 0
     ApplyModel(ui)
 end
+
+-- PlayerModel keeps showing the old gear until told to re-read the unit
+-- (Blizzard's paper doll does this on UNIT_MODEL_CHANGED). The refresh is
+-- deferred while the page is hidden and applied from OnShow.
+local function RefreshModel(ui)
+    local m = ui.model
+    if not m then return end
+    ui.modelDirty = nil
+    if m.RefreshUnit then
+        pcall(m.RefreshUnit, m)
+    else
+        pcall(m.SetUnit, m, "player")
+    end
+    ApplyModel(ui)
+end
+
+local function MarkModelDirty()
+    local ui = ns.invUI
+    if not (ui and ui.model) then return end
+    ui.modelDirty = true
+    if ns.pageFrames[3] and ns.pageFrames[3]:IsShown() then RefreshModel(ui) end
+end
+Nocturne.RegisterEvent("PLAYER_EQUIPMENT_CHANGED", MarkModelDirty)
+Nocturne.RegisterEvent("UNIT_MODEL_CHANGED", function(_, unit)
+    if unit == "player" then MarkModelDirty() end
+end)
 
 -- Dialog option rows: a highlighted row per option in the dialog's content
 -- frame (it replaces the body text).
@@ -1868,6 +1899,7 @@ ns.RegisterPage(3, {
     OnShow = function()
         if ns.invDirty then ns:InventoryRefresh() end
         local ui = ns.invUI
+        if ui and ui.modelDirty then RefreshModel(ui) end
         if ui and ui.UpdateBar then
             ui.UpdateBar()
             C_Timer.After(0, ui.UpdateBar)
