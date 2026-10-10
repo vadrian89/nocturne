@@ -12,7 +12,7 @@ local SLOT_ATLAS = "bags-item-slot64"
 local QUALITY_FRAME = "Interface\\Common\\WhiteIconFrame"
 local HEADER_H = 30
 local PAD = 40
-local STATS_W = 230
+local STATS_W = 265
 local EQ_CELL = 60
 
 local UpdateLegend, SyncUseButton
@@ -228,9 +228,13 @@ local STATS = {
         { "Critical Strike", function() return StatPct(GetCritChance) end,
             function() return SpellIcon(11366) end },
         { "Haste", function() return StatPct(GetHaste) end,
-            function() return SpellIcon(2825) end },
+            function()
+                return "Interface\\Icons\\Spell_Nature_Swiftness"
+            end },
         { "Mastery", function() return StatPct(GetMasteryEffect) end,
-            function() return SpellIcon(15359) end },
+            function()
+                return "Interface\\Icons\\Trade_BlackSmithing"
+            end },
         { "Versatility", function()
             if not (GetCombatRatingBonus and _G.CR_VERSATILITY_DAMAGE_DONE) then
                 return nil
