@@ -19,6 +19,7 @@ local UpdateLegend, SyncUseButton
 local TEXT = { 0.95, 0.95, 0.97, 1 }
 local HEADER_COLOR = { 0.80, 0.68, 0.42, 1 }
 local DIM_COLOR = { 0.60, 0.60, 0.65, 1 }
+local WHITE = { 1, 1, 1, 1 }
 
 local function StickAxis(v)
     if v == nil or ns.IsSecret(v) then return 0 end
@@ -326,8 +327,8 @@ local function StatRow(col, j)
         r = {
             bar = col:CreateTexture(nil, "ARTWORK"),
             icon = col:CreateTexture(nil, "ARTWORK", nil, 1),
-            label = T.CreateFontString(col, 19, DIM_COLOR),
-            value = T.CreateFontString(col, 19, TEXT),
+            label = T.CreateFontString(col, 19, WHITE),
+            value = T.CreateFontString(col, 19, WHITE),
         }
         r.bar:SetTexture("Interface\\CharacterFrame\\Char-Stat-Top")
         r.bar:Hide()
@@ -384,8 +385,7 @@ local function RenderStats(ui)
                     r.icon:ClearAllPoints()
                     r.label:SetFont(T.fonts.main, font, "")
                     r.value:SetFont(T.fonts.main, font, "")
-                    r.label:SetTextColor(DIM_COLOR[1], DIM_COLOR[2],
-                        DIM_COLOR[3])
+                    r.label:SetTextColor(1, 1, 1)
                     if sv[3] then
                         r.icon:SetPoint("TOPLEFT", col, "TOPLEFT", 0, y - 2)
                         r.icon:SetTexture(sv[3])
