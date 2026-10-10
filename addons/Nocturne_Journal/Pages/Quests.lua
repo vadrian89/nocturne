@@ -303,9 +303,11 @@ ns.RegisterPage(2, {
                     if prev then C_QuestLog.SetSelectedQuest(prev) end
                 end)
         end
+        -- Super-tracking is allowed on complete (ready to turn in) quests:
+        -- the nav arrow still leads to the quest ender.
         local function ToggleSuper()
             local item = ui.selected
-            if not Trackable(item) then return end
+            if not (item and item.logIndex) then return end
             if SuperID() == item.qid then
                 if C_SuperTrack.ClearAllSuperTracked then
                     C_SuperTrack.ClearAllSuperTracked()
@@ -621,11 +623,10 @@ ns.RegisterPage(2, {
 local function UpdateButtons(ui)
     local item = ui.selected
     local live = item and item.logIndex and not item.snap and not item.historical and not item.chainOnly
-    local trackable = live and not item.isComplete
     local watched = live and IsWatched(item.qid)
     ui.legendX.label:SetText(watched and "Untrack" or "Track")
     ui.legendY.label:SetText("Abandon")
-    ui.legendA.label:SetText(trackable and SuperID() == item.qid and "Remove active" or "Set as active")
+    ui.legendA.label:SetText(live and SuperID() == item.qid and "Remove active" or "Set as active")
 end
 
 function ns:QuestShowDetail()
