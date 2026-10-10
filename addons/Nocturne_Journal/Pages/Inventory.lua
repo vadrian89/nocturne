@@ -12,7 +12,8 @@ local SLOT_ATLAS = "bags-item-slot64"
 local QUALITY_FRAME = "Interface\\Common\\WhiteIconFrame"
 local HEADER_H = 30
 local PAD = 40
-local STATS_H = 170
+local STATS_W = 230
+local EQ_CELL = 60
 
 local UpdateLegend, SyncUseButton
 
@@ -103,6 +104,10 @@ local function HideItemTip(ui)
     if ui.tipOwner then
         GameTooltip:Hide()
         GameTooltip:SetScale(1)
+        for i = 1, 2 do
+            local st = _G["ShoppingTooltip" .. i]
+            if st then st:SetScale(1) end
+        end
         ui.tipOwner = nil
     end
 end
@@ -125,6 +130,11 @@ local function ShowItemTip(ui, b)
     end
     ui.tipOwner = b
     GameTooltip:SetScale(TIP_SCALE)
+    -- Comparison tooltip for the equipped counterpart uses the same scale.
+    for i = 1, 2 do
+        local st = _G["ShoppingTooltip" .. i]
+        if st then st:SetScale(TIP_SCALE) end
+    end
     GameTooltip:Show()
 end
 
@@ -155,45 +165,128 @@ local function StatPct(fn, ...)
     return ("%.1f%%"):format(v)
 end
 
+local function StatNum(fn, ...)
+    if not fn then return nil end
+    local v = fn(...)
+    if v == nil or ns.IsSecret(v) then return nil end
+    return tostring(v)
+end
+
+-- Stat icons: spell/item art (fileID) or a texture path — both are valid
+-- SetTexture inputs. SpellIDs are classic buffs with on-theme icons.
+local function SpellIcon(id)
+    local t = C_Spell and C_Spell.GetSpellTexture
+        and C_Spell.GetSpellTexture(id)
+    if t == nil and GetSpellTexture then t = GetSpellTexture(id) end
+    if t == nil or ns.IsSecret(t) then return nil end
+    return t
+end
+local function ItemIcon(id)
+    local t = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id)
+    if t == nil and GetItemIcon then t = GetItemIcon(id) end
+    if t == nil or ns.IsSecret(t) then return nil end
+    return t
+end
+
+-- { header, statCols index, rows }: column 1 is right of the doll, columns
+-- 2..4 are the three bottom slots. Row field 3 is the icon function.
 local STATS = {
-    { "Item Level", function()
-        local v = GetAverageItemLevel and GetAverageItemLevel()
-        if v == nil or ns.IsSecret(v) then return nil end
-        return ("%.1f"):format(v)
-    end },
-    { "Health", function()
-        local v = UnitHealthMax and UnitHealthMax("player")
-        if v == nil or ns.IsSecret(v) then return nil end
-        return tostring(v)
-    end },
-    { "Strength",  function() return StatUnit(1) end },
-    { "Agility",   function() return StatUnit(2) end },
-    { "Stamina",   function() return StatUnit(3) end },
-    { "Intellect", function() return StatUnit(4) end },
-    { "Armor", function()
-        if not UnitArmor then return nil end
-        local _, v = UnitArmor("player")
-        if v == nil or ns.IsSecret(v) then return nil end
-        return tostring(v)
-    end },
-    { "Critical Strike", function() return StatPct(GetCritChance) end },
-    { "Haste",           function() return StatPct(GetHaste) end },
-    { "Mastery",         function() return StatPct(GetMasteryEffect) end },
-    { "Versatility", function()
-        if not (GetCombatRatingBonus and _G.CR_VERSATILITY_DAMAGE_DONE) then
-            return nil
-        end
-        return StatPct(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
-    end },
-    { "Dodge", function() return StatPct(GetDodgeChance) end },
-    { "Parry", function() return StatPct(GetParryChance) end },
-    { "Block", function() return StatPct(GetBlockChance) end },
-    { "Speed", function()
-        if not GetUnitSpeed then return nil end
-        local v = GetUnitSpeed("player")
-        if v == nil or ns.IsSecret(v) then return nil end
-        return ("%.0f%%"):format(v / 7 * 100)
-    end },
+    { "General", 1, {
+        { "Item Level", function()
+            local v = GetAverageItemLevel and GetAverageItemLevel()
+            if v == nil or ns.IsSecret(v) then return nil end
+            return ("%.1f"):format(v)
+        end, function() return ItemIcon(19) end },
+        { "Health", function() return StatNum(UnitHealthMax, "player") end,
+            function() return SpellIcon(2054) end },
+        { "Mana", function()
+            local pt = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
+            local v = UnitPowerMax and UnitPowerMax("player", pt)
+            if v == nil or ns.IsSecret(v) or v == 0 then return nil end
+            return tostring(v)
+        end, function() return SpellIcon(12051) end },
+        { "Movement Speed", function()
+            if not GetUnitSpeed then return nil end
+            local v = GetUnitSpeed("player")
+            if v == nil or ns.IsSecret(v) then return nil end
+            return ("%.0f%%"):format(v / 7 * 100)
+        end, function() return SpellIcon(2983) end },
+    } },
+    { "Primary Attributes", 1, {
+        { "Strength", function() return StatUnit(1) end,
+            function() return SpellIcon(6673) end },
+        { "Agility", function() return StatUnit(2) end,
+            function() return SpellIcon(768) end },
+        { "Stamina", function() return StatUnit(3) end,
+            function() return SpellIcon(1243) end },
+        { "Intellect", function() return StatUnit(4) end,
+            function() return SpellIcon(1459) end },
+        { "Spirit", function() return StatUnit(5) end,
+            function() return SpellIcon(14752) end },
+    } },
+    { "Modifiers", 1, {
+        { "Critical Strike", function() return StatPct(GetCritChance) end,
+            function() return SpellIcon(11366) end },
+        { "Haste", function() return StatPct(GetHaste) end,
+            function() return SpellIcon(2825) end },
+        { "Mastery", function() return StatPct(GetMasteryEffect) end,
+            function() return SpellIcon(15359) end },
+        { "Versatility", function()
+            if not (GetCombatRatingBonus and _G.CR_VERSATILITY_DAMAGE_DONE) then
+                return nil
+            end
+            return StatPct(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+        end, function() return SpellIcon(740) end },
+    } },
+    { "Weapons", 2, { -- column 2 sits under the equipment cells
+        { "Main Hand", function()
+            if not UnitDamage then return nil end
+            local lo, hi = UnitDamage("player")
+            if lo == nil or hi == nil or ns.IsSecret(lo) or ns.IsSecret(hi) then
+                return nil
+            end
+            return ("%.0f - %.0f"):format(lo, hi)
+        end, function() return SpellIcon(78) end },
+        { "Attack Power", function()
+            if not UnitAttackPower then return nil end
+            local base, pos, neg = UnitAttackPower("player")
+            if base == nil or ns.IsSecret(base) then return nil end
+            return tostring(base + (pos or 0) + (neg or 0))
+        end, function() return SpellIcon(19506) end },
+    } },
+    { "Defense", 1, {
+        { "Defense", function()
+            if not UnitDefense then return nil end
+            local base, mod = UnitDefense("player")
+            if base == nil or ns.IsSecret(base) then return nil end
+            mod = (mod ~= nil and not ns.IsSecret(mod)) and mod or 0
+            return ("%d / %d"):format(base, base + mod)
+        end, function() return SpellIcon(871) end },
+        { "Dodge", function() return StatPct(GetDodgeChance) end,
+            function() return SpellIcon(5277) end },
+        { "Parry", function() return StatPct(GetParryChance) end,
+            function() return SpellIcon(20230) end },
+        { "Block", function() return StatPct(GetBlockChance) end,
+            function() return SpellIcon(2565) end },
+        { "Armor", function()
+            if not UnitArmor then return nil end
+            local _, v = UnitArmor("player")
+            if v == nil or ns.IsSecret(v) then return nil end
+            return tostring(v)
+        end, function() return SpellIcon(588) end },
+    } },
+    { "Resistances", 1, {
+        { "Arcane", function() return StatNum(UnitResistance, "player", 7) end,
+            function() return "Interface\\PaperDollInfoFrame\\SpellSchoolIcon7" end },
+        { "Fire", function() return StatNum(UnitResistance, "player", 3) end,
+            function() return "Interface\\PaperDollInfoFrame\\SpellSchoolIcon3" end },
+        { "Frost", function() return StatNum(UnitResistance, "player", 5) end,
+            function() return "Interface\\PaperDollInfoFrame\\SpellSchoolIcon5" end },
+        { "Nature", function() return StatNum(UnitResistance, "player", 4) end,
+            function() return "Interface\\PaperDollInfoFrame\\SpellSchoolIcon4" end },
+        { "Shadow", function() return StatNum(UnitResistance, "player", 6) end,
+            function() return "Interface\\PaperDollInfoFrame\\SpellSchoolIcon6" end },
+    } },
 }
 
 local function StatRow(col, j)
@@ -205,14 +298,16 @@ local function StatRow(col, j)
     local r = rows[j]
     if not r then
         r = {
-            label = T.CreateFontString(col, 15, DIM_COLOR),
-            value = T.CreateFontString(col, 15, TEXT),
+            bar = col:CreateTexture(nil, "ARTWORK"),
+            icon = col:CreateTexture(nil, "ARTWORK", nil, 1),
+            label = T.CreateFontString(col, 19, DIM_COLOR),
+            value = T.CreateFontString(col, 19, TEXT),
         }
+        r.bar:SetTexture("Interface\\CharacterFrame\\Char-Stat-Top")
+        r.bar:Hide()
         r.label:SetJustifyH("LEFT")
         r.value:SetJustifyH("RIGHT")
-        local top = -34 - (j - 1) * 22
-        r.label:SetPoint("TOPLEFT", col, "TOPLEFT", 0, top)
-        r.value:SetPoint("TOPRIGHT", col, "TOPRIGHT", 0, top)
+        r.icon:SetSize(18, 18)
         rows[j] = r
     end
     return r
@@ -221,25 +316,77 @@ end
 local function RenderStats(ui)
     local cols = ui.statCols
     if not cols then return end
-    local shown = {}
-    for _, s in ipairs(STATS) do
-        local ok, v = pcall(s[2])
-        if ok and v ~= nil then shown[#shown + 1] = { s[1], tostring(v) } end
+    local used, ys = {}, {}
+    for _, group in ipairs(STATS) do
+        local col = cols[group[2]]
+        if col then
+            local rows = {}
+            for _, s in ipairs(group[3]) do
+                local ok, v = pcall(s[2])
+                if ok and v ~= nil then
+                    local icon = s[3] and s[3]()
+                    rows[#rows + 1] = { s[1], tostring(v), icon }
+                end
+            end
+            if #rows > 0 then
+                local n = (used[col] or 0) + 1
+                local y = ys[col] or -8
+                local font = 19
+                local r = StatRow(col, n)
+                -- Category header: the character-frame stat-category bar.
+                r.bar:ClearAllPoints()
+                r.bar:SetPoint("TOPLEFT", col, "TOPLEFT", -4, y)
+                r.bar:SetPoint("TOPRIGHT", col, "TOPRIGHT", 4, y)
+                r.bar:SetHeight(28)
+                r.bar:Show()
+                r.label:ClearAllPoints()
+                r.label:SetFont(T.fonts.main, font, "")
+                r.label:SetTextColor(HEADER_COLOR[1], HEADER_COLOR[2],
+                    HEADER_COLOR[3])
+                r.label:SetPoint("CENTER", r.bar, "CENTER", 0, -1)
+                r.label:SetText(group[1])
+                r.value:Hide()
+                r.icon:Hide()
+                y = y - 34
+                for _, sv in ipairs(rows) do
+                    n = n + 1
+                    used[col] = n
+                    r = StatRow(col, n)
+                    r.bar:Hide()
+                    r.label:ClearAllPoints()
+                    r.value:ClearAllPoints()
+                    r.icon:ClearAllPoints()
+                    r.label:SetFont(T.fonts.main, font, "")
+                    r.value:SetFont(T.fonts.main, font, "")
+                    r.label:SetTextColor(DIM_COLOR[1], DIM_COLOR[2],
+                        DIM_COLOR[3])
+                    if sv[3] then
+                        r.icon:SetPoint("TOPLEFT", col, "TOPLEFT", 0, y - 2)
+                        r.icon:SetTexture(sv[3])
+                        r.icon:Show()
+                        r.label:SetPoint("TOPLEFT", col, "TOPLEFT", 24, y)
+                    else
+                        r.icon:Hide()
+                        r.label:SetPoint("TOPLEFT", col, "TOPLEFT", 0, y)
+                    end
+                    r.value:SetPoint("TOPRIGHT", col, "TOPRIGHT", 0, y)
+                    r.label:SetText(sv[1])
+                    r.value:SetText(sv[2])
+                    r.label:Show()
+                    r.value:Show()
+                    y = y - 25
+                end
+                ys[col] = y - 8
+            end
+        end
     end
-    local per = math.ceil(#shown / #cols)
-    for i, sv in ipairs(shown) do
-        local ci = math.ceil(i / per)
-        local r = StatRow(cols[ci], i - (ci - 1) * per)
-        r.label:SetText(sv[1])
-        r.value:SetText(sv[2])
-        r.label:Show()
-        r.value:Show()
-    end
-    for ci, col in ipairs(cols) do
-        local used = math.max(0, math.min(per, #shown - (ci - 1) * per))
-        for j = used + 1, #(col.rows or {}) do
-            col.rows[j].label:Hide()
-            col.rows[j].value:Hide()
+    for _, col in ipairs(cols) do
+        for j = (used[col] or 0) + 1, #(col.rows or {}) do
+            local r = col.rows[j]
+            r.bar:Hide()
+            r.label:Hide()
+            r.value:Hide()
+            r.icon:Hide()
         end
     end
 end
@@ -804,40 +951,23 @@ ns.RegisterPage(3, {
         end
         scroll:SetScript("OnSizeChanged", function() ui.UpdateBar() end)
 
-        -- Bottom band: character stats in two columns, below the doll.
-        local stats = CreateFrame("Frame", nil, equip)
-        ui.stats = stats
-        stats:SetPoint("BOTTOMLEFT", equip, "BOTTOMLEFT", PAD, PAD)
-        stats:SetPoint("BOTTOMRIGHT", equip, "BOTTOMRIGHT", -PAD, PAD)
-        stats:SetHeight(STATS_H)
-        local sTitle = T.CreateFontString(stats, 22, HEADER_COLOR)
-        sTitle:SetPoint("TOPLEFT")
-        sTitle:SetText("Stats")
         ui.statCols = {}
-        local prev
-        for i = 1, 3 do
-            local col = CreateFrame("Frame", nil, stats)
-            if prev then
-                col:SetPoint("TOPLEFT", prev, "TOPRIGHT", 16, 0)
-            else
-                col:SetPoint("TOPLEFT")
-            end
-            col:SetPoint("BOTTOM")
-            ui.statCols[i] = col
-            prev = col
-        end
-        stats:SetScript("OnSizeChanged", function(_, w)
-            local cw = math.max(40, (w - 32) / 3)
-            for _, col in ipairs(ui.statCols) do col:SetWidth(cw) end
-        end)
 
+        -- Weapons stats go under the model, centered on its column.
+        local wstats = CreateFrame("Frame", nil, equip)
+        ui.statCols[2] = wstats
+        wstats:SetSize(280, 110)
+        wstats:SetPoint("BOTTOM", equip, "BOTTOM", -35, PAD)
+
+        -- Middle column: the character model, between the gear and stats.
         local ok, model = pcall(CreateFrame, "PlayerModel", nil, equip)
         if ok and model then
             ui.model = model
-            model:SetPoint("TOP", 0, -40)
-            model:SetPoint("BOTTOM", stats, "TOP", 0, 80)
-            model:SetPoint("LEFT", equip, "LEFT", 100, 0)
-            model:SetPoint("RIGHT", equip, "RIGHT", -100, 0)
+            model:SetPoint("TOPLEFT", equip, "TOPLEFT",
+                PAD + 2 * EQ_CELL + 56, -40)
+            model:SetPoint("RIGHT", equip, "RIGHT",
+                -PAD - STATS_W - 16, 0)
+            model:SetPoint("BOTTOM", wstats, "TOP", 0, 10)
             model:SetAlpha(0.9)
             pcall(function() model:SetUnit("player") end)
             ui.modelYaw = 0
@@ -845,9 +975,17 @@ ns.RegisterPage(3, {
             ui.modelZoom = 1
         end
 
+        -- Right column: all stats except Weapons, full height.
+        local stats = CreateFrame("Frame", nil, equip)
+        ui.stats = stats
+        stats:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD)
+        stats:SetPoint("BOTTOMRIGHT", equip, "BOTTOMRIGHT", -PAD, PAD)
+        stats:SetWidth(STATS_W)
+        ui.statCols[1] = stats
+
         local function EquipCell(slotID, slotName)
             local b = NewCell(equip)
-            b:SetSize(CELL + 6, CELL + 6)
+            b:SetSize(EQ_CELL, EQ_CELL)
             b.label = T.CreateFontString(b, 12, DIM_COLOR)
             b.label:SetPoint("TOP", b, "BOTTOM", 0, -2)
             b.label:SetText(SLOT_NAMES[slotName] or slotName)
@@ -868,22 +1006,28 @@ ns.RegisterPage(3, {
             ui.navEquip[r] = ui.navEquip[r] or {}
             ui.navEquip[r][c] = b
         end
+        -- Column A is 208 wide (the 3-cell weapon row); the 2 gear columns
+        -- (140) are centered inside it.
+        local lastL
         for i, s in ipairs(EQUIP_LEFT) do
             local b = EquipCell(s[1], s[2])
             b.tipAnchor = "ANCHOR_RIGHT"
-            b:SetPoint("TOPLEFT", equip, "TOPLEFT", PAD, -PAD - (i - 1) * 78)
+            b:SetPoint("TOPLEFT", equip, "TOPLEFT",
+                PAD + 34, -PAD - (i - 1) * 74)
             NavEquip(b, i, 1)
+            lastL = b
         end
         for i, s in ipairs(EQUIP_RIGHT) do
             local b = EquipCell(s[1], s[2])
             b.tipAnchor = "ANCHOR_LEFT"
-            b:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD - (i - 1) * 78)
+            b:SetPoint("TOPLEFT", equip, "TOPLEFT",
+                PAD + 34 + EQ_CELL + 20, -PAD - (i - 1) * 74)
             NavEquip(b, i, 2)
         end
         for i, s in ipairs(EQUIP_BOTTOM) do
             local b = EquipCell(s[1], s[2])
             b.tipAnchor = "ANCHOR_TOP"
-            b:SetPoint("BOTTOM", stats, "TOP", (i - 2) * 66, 16)
+            b:SetPoint("TOP", lastL, "BOTTOM", (i - 1) * 74 - 34, -18)
             NavEquip(b, 9, i)
         end
 
@@ -942,7 +1086,7 @@ ns.RegisterPage(3, {
         end)
 
         local function Layout()
-            bags:SetWidth(math.floor(f:GetWidth() * 0.4) - GAP)
+            bags:SetWidth(math.floor(f:GetWidth() * 0.3) - GAP)
             child:SetWidth(math.max(10, scroll:GetWidth()))
             RenderBags(ui)
         end
