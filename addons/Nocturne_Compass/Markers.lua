@@ -70,7 +70,12 @@ local function ApplyIcon(m, entry)
         m.icon:SetAtlas(atlas)
     elseif entry.icon then
         m.icon:SetTexture(entry.icon)
-        m.icon:SetTexCoord(0, 1, 0, 1)
+        local c = entry.texCoords
+        if c then
+            m.icon:SetTexCoord(c[1], c[2], c[3], c[4])
+        else
+            m.icon:SetTexCoord(0, 1, 0, 1)
+        end
     elseif entry.textureIndex and GetPOITextureCoords then
         m.icon:SetTexture(POI_TEXTURE)
         m.icon:SetTexCoord(GetPOITextureCoords(entry.textureIndex))

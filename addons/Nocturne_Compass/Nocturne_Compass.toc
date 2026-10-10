@@ -18,6 +18,7 @@ QuestFix.lua
 Providers\TrackedQuests.lua
 Providers\MapPins.lua
 Providers\LearnedPOIs.lua
+Providers\Corpse.lua
 Clock.lua
 MinimapFrame.lua
 Minimap.lua
