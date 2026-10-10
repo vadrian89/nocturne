@@ -12,6 +12,7 @@ ns.charDefaults = {
     completed = {}, -- newest-first array of snapshots (see QuestArchive.lua)
     pending   = {}, -- qid -> snapshot for quests still in the log
     titles    = {}, -- qid -> resolved title (historical quests load async)
+    binds     = {}, -- pad key/chord -> itemID bound from the Inventory page
 }
 
 -- Called from ADDON_LOADED (see Init.lua) — SavedVariables are nil until then.

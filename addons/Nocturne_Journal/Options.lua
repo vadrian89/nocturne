@@ -104,6 +104,22 @@ function ns:DiagText()
         add(("invScrollBox: scroll[%s] screen=%.0fx%.0f"):format(
             Box(ui.scroll), UIParent:GetWidth(), UIParent:GetHeight()))
     end
+    if ns.chardb and ns.chardb.binds then
+        local t = {}
+        for k, v in pairs(ns.chardb.binds) do
+            local act = GetBindingAction
+                and GetBindingAction(k, true) or "?"
+            t[#t + 1] = ("%s->%s [%s]"):format(k, tostring(v), tostring(act))
+        end
+        table.sort(t)
+        add("item binds: " .. (#t > 0 and table.concat(t, ", ") or "none"))
+        local held = {}
+        for k in pairs(ns.heldSeen or {}) do held[#held + 1] = k end
+        table.sort(held)
+        add("held seen: " .. (#held > 0 and table.concat(held, ",") or "none"))
+        add(("chord: sig=%q applies=%d bindClicks=%d"):format(
+            ns.chordSig or "", ns.chordApplies or 0, ns.bindClicks or 0))
+    end
     if ns.invUI then
         local ub = ns.invUI.useBtn
         add(("padUse: btn=%s item=%s clicks=%d padBind=%s"):format(

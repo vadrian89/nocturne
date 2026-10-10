@@ -51,6 +51,24 @@ local function ItemInfo(bag, slot)
     if info and info.iconFileID then return info end
 end
 
+local function BindsForItem(itemID)
+    local seqs
+    if ns.chardb and ns.chardb.binds then
+        for seq, id in pairs(ns.chardb.binds) do
+            if id == itemID then
+                seqs = seqs or {}
+                seqs[#seqs + 1] = seq
+            end
+        end
+    end
+    if seqs then table.sort(seqs) end
+    return seqs
+end
+
+local function ItemBound(itemID)
+    return BindsForItem(itemID) ~= nil
+end
+
 local function NewCell(parent)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(CELL, CELL)
@@ -70,6 +88,11 @@ local function NewCell(parent)
     b.q:Hide()
     b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     b.count:SetPoint("BOTTOMRIGHT", -2, 1)
+    b.bind = b:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+    b.bind:SetPoint("TOPRIGHT", -1, -1)
+    b.bind:SetText("B")
+    b.bind:SetTextColor(1, 0.82, 0.25)
+    b.bind:Hide()
     b.sel = b:CreateTexture(nil, "OVERLAY")
     b.sel:SetPoint("TOPLEFT", -3, 3)
     b.sel:SetPoint("BOTTOMRIGHT", 3, -3)
@@ -577,10 +600,18 @@ local function RenderBags(ui)
                     b.count:SetText((info.stackCount and info.stackCount > 1)
                         and info.stackCount or "")
                     QualityBorder(b, info.quality)
+                    if b.bind then
+                        if ItemBound(info.itemID) then
+                            b.bind:Show()
+                        else
+                            b.bind:Hide()
+                        end
+                    end
                 else
                     b.icon:SetTexture(nil)
                     b.count:SetText("")
                     QualityBorder(b, nil)
+                    if b.bind then b.bind:Hide() end
                 end
                 b.bag, b.slot = el.bag, el.slot
                 b.navRow, b.navCol = navRow, j
@@ -846,20 +877,443 @@ local function PadDestroy(ui)
         if not b.bag then return end
         local info = C_Container.GetContainerItemInfo(b.bag, b.slot)
         if not info or not info.itemID then return end
-        name = (GetItemInfo and GetItemInfo(info.itemID)) or "item"
+        name = info.itemName
+            or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
         destroy = function()
             C_Container.PickupContainerItem(b.bag, b.slot)
             if DeleteCursorItem then DeleteCursorItem() end
         end
     else
         if not b.link then return end
-        name = (GetItemInfo and GetItemInfo(b.link)) or "item"
+        name = (C_Item and C_Item.GetItemNameByID
+                and C_Item.GetItemNameByID(b.link))
+            or (GetItemInfo and GetItemInfo(b.link)) or "item"
         destroy = function()
             PickupInventoryItem(b.slotID)
             if DeleteCursorItem then DeleteCursorItem() end
         end
     end
-    ns:ShowConfirm(("Destroy \"%s\"?"):format(name), "Destroy", destroy)
+    ns:ShowConfirm(("Destroy \"%s\"?"):format(name), nil, "Destroy", destroy)
+end
+
+-- Small in-page dialogs (split stepper, bind capture) swallow all pad input
+-- through ns.padCapture and drop PadBind so PAD1 reaches the capture too.
+local function CloseDlg(ui)
+    ns.padCapture = nil
+    ui.dlgOpen = nil
+    ui.split = nil
+    ui.bindCap = nil
+    if ui.dlg then ui.dlg:Hide() end
+    ns:UpdatePadMode()
+end
+
+local function FitDlg(d)
+    ns:FitDialog(d)
+end
+
+local function OpenDlg(ui, title, hint)
+    local d = ui.dlg
+    d.title:SetText(title)
+    d.body:SetText("")
+    d.err:SetText("")
+    d.hint:SetText(hint or "")
+    ui.dlgOpen = true
+    d:Show()
+    FitDlg(d)
+    ns:UpdatePadMode()
+end
+
+local function OpenSplitDlg(ui)
+    local b = ui.selected
+    local info = b and b.bag and ItemInfo(b.bag, b.slot)
+    if not (info and info.stackCount and info.stackCount > 1) then return end
+    if not C_Container.SplitContainerItem then return end
+    local name = (GetItemInfo and GetItemInfo(info.itemID)) or "item"
+    ui.split = { bag = b.bag, slot = b.slot, max = info.stackCount, n = 1 }
+    OpenDlg(ui, "Split item", "D-Pad  amount        A  Split        B  Cancel")
+    local function Body()
+        ui.dlg.body:SetText(("Split \"%s\"\namount: %d / %d")
+            :format(name, ui.split.n, ui.split.max))
+        FitDlg(ui.dlg)
+    end
+    Body()
+    ns.padCapture = function(btn, down)
+        local s = ui.split
+        if not (down and s) then return end
+        if s.placing then
+            if btn == "PAD1" then
+                local c = ui.selected
+                if c and c.bag and not ItemInfo(c.bag, c.slot) then
+                    C_Container.PickupContainerItem(c.bag, c.slot)
+                    ns:InventoryRefresh()
+                    CloseDlg(ui)
+                else
+                    ui.dlg.err:SetText("Pick an empty slot")
+                    FitDlg(ui.dlg)
+                end
+                return
+            elseif btn == "PAD2" or btn == "PADBACK" then
+                -- Cancel: drop the cursor into the first empty slot.
+                for _, bag in ipairs(BagIDs()) do
+                    local n = C_Container.GetContainerNumSlots
+                        and C_Container.GetContainerNumSlots(bag) or 0
+                    for slot = 1, n do
+                        if not ItemInfo(bag, slot) then
+                            C_Container.PickupContainerItem(bag, slot)
+                            s.placed = true
+                            break
+                        end
+                    end
+                    if s.placed then break end
+                end
+                ns:InventoryRefresh()
+                CloseDlg(ui)
+                return
+            end
+            if btn == "PADDUP" then
+                MoveInvSelection(ui, 0, -1)
+            elseif btn == "PADDDOWN" then
+                MoveInvSelection(ui, 0, 1)
+            elseif btn == "PADDLEFT" then
+                MoveInvSelection(ui, -1, 0)
+            elseif btn == "PADDRIGHT" then
+                MoveInvSelection(ui, 1, 0)
+            end
+            return
+        end
+        if btn == "PADDLEFT" then
+            s.n = math.max(1, s.n - 1)
+        elseif btn == "PADDRIGHT" then
+            s.n = math.min(s.max - 1, s.n + 1)
+        elseif btn == "PADDDOWN" then
+            s.n = math.max(1, s.n - 5)
+        elseif btn == "PADDUP" then
+            s.n = math.min(s.max - 1, s.n + 5)
+        elseif btn == "PAD1" then
+            C_Container.SplitContainerItem(s.bag, s.slot, s.n)
+            s.placing = true
+            ui.dlg.title:SetText("Place split stack")
+            ui.dlg.body:SetText("Move to an empty slot")
+            ui.dlg.err:SetText("")
+            ui.dlg.hint:SetText(
+                "D-Pad  choose slot        A  place        B  auto")
+            FitDlg(ui.dlg)
+            return
+        elseif btn == "PAD2" or btn == "PADBACK" then
+            CloseDlg(ui)
+            return
+        else
+            return
+        end
+        Body()
+    end
+end
+
+-- Binds a usable item to a pad sequence while the journal is open: either a
+-- single free key (paddles, PAD5/6...) or LT/RT modifier(s) + one button
+-- ("PADLTRIGGER-PAD3", "PADLTRIGGER-PADRTRIGGER-PAD3").
+local BIND_MODS = {
+    PADLTRIGGER = true,
+    PADRTRIGGER = true,
+}
+local BIND_RESERVED = {
+    PAD1 = true,
+    PAD2 = true,
+    PAD3 = true,
+    PAD4 = true,
+    PADDUP = true,
+    PADDDOWN = true,
+    PADDLEFT = true,
+    PADDRIGHT = true,
+    PADBACK = true,
+    PADLSTICK = true,
+    PADRSTICK = true,
+}
+
+local function ItemUsable(info)
+    local id = info and info.itemID
+    if not id then return false end
+    if IsEquippableItem and IsEquippableItem(id) then return true end
+    -- Items with a "Use:" effect expose it through GetItemSpell.
+    local getSpell = (C_Item and C_Item.GetItemSpell) or GetItemSpell
+    if getSpell and getSpell(id) then return true end
+    if IsUsableItem then
+        local ok, usable = pcall(IsUsableItem, id)
+        if ok and usable then return true end
+    end
+    return false
+end
+
+-- Canonical chord string: modifiers sorted (the binding system builds them
+-- in a fixed order, so "RT-LT-X" never matches the pressed chord).
+local function CanonBindKey(seq)
+    if #seq == 1 then return seq[1] end
+    local mods = {}
+    for i = 1, #seq - 1 do mods[#mods + 1] = seq[i] end
+    table.sort(mods)
+    mods[#mods + 1] = seq[#seq]
+    return table.concat(mods, "-")
+end
+
+local function SeqBindKey(seq)
+    if #seq == 1 then
+        local k = seq[1]
+        if BIND_MODS[k] then return nil, "a modifier alone can't be bound" end
+        if BIND_RESERVED[k] then
+            return nil, k .. " is used by the journal"
+        end
+        return k
+    end
+    if #seq > 3 or BIND_MODS[seq[#seq]] then
+        return nil, "sequence must end with a button"
+    end
+    for i = 1, #seq - 1 do
+        if not BIND_MODS[seq[i]] then
+            return nil, "only LT and RT can be modifiers"
+        end
+        if seq[i] == seq[#seq] then return nil, "duplicate key" end
+    end
+    if #seq == 3 and seq[1] == seq[2] then return nil, "duplicate key" end
+    return CanonBindKey(seq)
+end
+
+-- Forever's native gamepad bars already turn modifier state + button into a
+-- bar slot: LT selects the left bar, RT the right bar, LT+RT the bottom bar,
+-- none the top bar; the last key picks one of the 8 diamond buttons
+-- (dpad 1-4, face buttons 5-8). Placing the item on that storage slot makes
+-- the captured chord work outside the journal too.
+local BAR_BTN = {
+    PADDLEFT = 1,
+    PADDUP = 2,
+    PADDRIGHT = 3,
+    PADDDOWN = 4,
+    PAD3 = 5,
+    PAD4 = 6,
+    PAD2 = 7,
+    PAD1 = 8,
+}
+
+local function GamepadBarSlot(seq)
+    local util = _G.GamepadActionBarBindingUtil
+    local pu = _G.GamepadMainActionBarFrame
+        and _G.GamepadMainActionBarFrame.PageUnit
+    if not (util and pu and pu.GetCurrentPage) then return nil end
+    local parts = {}
+    for k in seq:gmatch("[^-]+") do parts[#parts + 1] = k end
+    local btnIdx = BAR_BTN[parts[#parts]]
+    if not btnIdx then return nil end
+    local lt, rt = false, false
+    for i = 1, #parts - 1 do
+        if parts[i] == "PADLTRIGGER" then
+            lt = true
+        elseif parts[i] == "PADRTRIGGER" then
+            rt = true
+        end
+    end
+    -- Bar index order: top, left(LT), right(RT), bottom(LT+RT).
+    local slotID = ((lt and rt) and 3 or lt and 1 or rt and 2 or 0) * 8
+        + btnIdx
+    if util.IsReservedPageUnitSlotID(slotID) then return nil end
+    local page = pu:GetCurrentPage()
+    if not util.IsStandardGamepadPageNum(page) then page = 1 end
+    return util.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID(
+        page, slotID)
+end
+
+local function PlaceOnGamepadBar(seq, itemID)
+    local util = _G.GamepadActionBarBindingUtil
+    local slot = util and GamepadBarSlot(seq)
+    if not slot then return nil end
+    local ok = util.AssignActionToGamepadStandardSlot(slot, function(id)
+        if C_Item and C_Item.PickupItem then
+            C_Item.PickupItem(id)
+        elseif PickupItem then
+            PickupItem(id)
+        end
+    end, itemID)
+    return ok and slot or nil
+end
+
+local function ClearOnGamepadBar(seq, itemID)
+    local util = _G.GamepadActionBarBindingUtil
+    local slot = util and util.ClearActionFromGamepadSlot
+        and GamepadBarSlot(seq)
+    if not slot then return end
+    local t, id = GetActionInfo(slot)
+    if t == "item" and id == itemID then
+        util.ClearActionFromGamepadSlot(slot)
+    end
+end
+
+-- Render a stored/pressed sequence with the active controller's glyphs.
+local function SeqGlyphs(seq)
+    local out = {}
+    for k in seq:gmatch("[^-]+") do
+        out[#out + 1] = ns.PadGlyph(k, k:gsub("^PAD", ""))
+    end
+    return table.concat(out, " + ")
+end
+
+local function UnbindItem(ui, itemID, name)
+    local removed = 0
+    for seq, id in pairs(ns.chardb.binds) do
+        if id == itemID then
+            ns.chardb.binds[seq] = nil
+            ClearOnGamepadBar(seq, id)
+            removed = removed + 1
+        end
+    end
+    ns:ReapplyItemBinds()
+    RenderBags(ui)
+    if removed > 0 then
+        Nocturne.Print(("Unbound %s (%d bind%s)."):format(
+            name, removed, removed == 1 and "" or "s"))
+    else
+        Nocturne.Print(("%s has no binds."):format(name))
+    end
+end
+
+local function OpenBindDlg(ui)
+    local b = ui.selected
+    local info = b and b.bag and ItemInfo(b.bag, b.slot)
+    if not ItemUsable(info) then return end
+    if not (ns.chardb and ns.chardb.binds) then return end
+    local name = info.itemName
+        or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
+    ui.bindCap = { seq = {}, held = {}, itemID = info.itemID }
+    OpenDlg(ui, "Bind " .. name,
+        ns.PadGlyph("PAD2", "B") .. "  Cancel")
+    local function Body()
+        local lines = {}
+        local cur = BindsForItem(ui.bindCap.itemID)
+        if cur then
+            local g = {}
+            for _, s in ipairs(cur) do g[#g + 1] = SeqGlyphs(s) end
+            lines[#lines + 1] = "current: " .. table.concat(g, "   ")
+        end
+        if #ui.bindCap.seq > 0 then
+            local g = {}
+            for _, s in ipairs(ui.bindCap.seq) do
+                g[#g + 1] = ns.PadGlyph(s, s:gsub("^PAD", ""))
+            end
+            lines[#lines + 1] = table.concat(g, " + ")
+        else
+            lines[#lines + 1] = "Hold LT/RT + key to bind"
+        end
+        ui.dlg.body:SetText(table.concat(lines, "\n"))
+        FitDlg(ui.dlg)
+    end
+    Body()
+    ns.padCapture = function(btn, down)
+        local cap = ui.bindCap
+        if not cap then return end
+        if down then
+            cap.held[btn] = true
+            if #cap.seq < 3 then cap.seq[#cap.seq + 1] = btn end
+            ui.dlg.err:SetText("")
+            Body()
+            return
+        end
+        cap.held[btn] = nil
+        if next(cap.held) or #cap.seq == 0 then return end
+        if #cap.seq == 1 and cap.seq[1] == "PAD2" then
+            CloseDlg(ui)
+            return
+        end
+        local key, err = SeqBindKey(cap.seq)
+        if not key then
+            ui.dlg.err:SetText("Invalid: " .. err)
+            cap.seq = {}
+            Body()
+            return
+        end
+        -- One bind per item: drop the item's previous seqs (and their
+        -- bar slots) before storing the new one.
+        for seq, id in pairs(ns.chardb.binds) do
+            if id == cap.itemID and seq ~= key then
+                ns.chardb.binds[seq] = nil
+                ClearOnGamepadBar(seq, id)
+            end
+        end
+        ns.chardb.binds[key] = cap.itemID
+        CloseDlg(ui)
+        ns:ReapplyItemBinds()
+        RenderBags(ui)
+        if PlaceOnGamepadBar(key, cap.itemID) then
+            Nocturne.Print(("Bound %s to %s (also on action bar).")
+                :format(name, key))
+        else
+            Nocturne.Print(("Bound %s to %s."):format(name, key))
+        end
+    end
+end
+
+local function EnsureBindButton(ui, i)
+    ui.bindBtns = ui.bindBtns or {}
+    if ui.bindBtns[i] then return ui.bindBtns[i] end
+    if InCombatLockdown and InCombatLockdown() then return nil end
+    local ok, b = pcall(CreateFrame, "Button",
+        "NocturneJournalPadBind" .. i, UIParent, "SecureActionButtonTemplate")
+    if not ok or not b then return nil end
+    b:SetSize(1, 1)
+    b:SetAlpha(0)
+    b:EnableMouse(false)
+    b:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", i * 2, 0)
+    b:RegisterForClicks("AnyUp")
+    b:SetAttribute("type", "item")
+    b:SetAttribute("useOnKeyDown", false)
+    b:HookScript("OnClick", function()
+        ui.useAt = GetTime()
+        ns.bindClicks = (ns.bindClicks or 0) + 1
+    end)
+    ui.bindBtns[i] = b
+    return b
+end
+
+-- Called by the shell whenever the journal is (re)shown: creates one secure
+-- use-button per stored seq and override-binds the seq to click it.
+function ns.invApplyBinds(owner)
+    local ui = ns.invUI
+    if not (ui and ns.chardb and ns.chardb.binds) then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    -- Rewrite stored seqs canonically once so the key used for the binding
+    -- and the key shown in diag always match.
+    local binds, norm, dirty = ns.chardb.binds, {}, false
+    for seq, itemID in pairs(binds) do
+        local parts = {}
+        for k in seq:gmatch("[^-]+") do parts[#parts + 1] = k end
+        local canon = CanonBindKey(parts)
+        norm[canon] = itemID
+        if canon ~= seq then dirty = true end
+    end
+    if dirty then
+        wipe(binds)
+        for k, v in pairs(norm) do binds[k] = v end
+    end
+    ui.bindBtnFor = wipe(ui.bindBtnFor or {})
+    local i = 0
+    for seq, itemID in pairs(binds) do
+        i = i + 1
+        local b = EnsureBindButton(ui, i)
+        if not b then return end
+        b:SetAttribute("item", "item:" .. itemID)
+        ui.bindBtnFor[seq] = b
+        -- Only plain keys get a static binding; chord seqs are re-mapped
+        -- dynamically while their modifiers are held (see UpdateChordBinds).
+        if not seq:find("-", 1, true) then
+            pcall(SetOverrideBindingClick, owner, true,
+                seq, b:GetName(), "LeftButton")
+        end
+    end
+    -- Once per session mirror stored binds onto the native action bars so
+    -- chords keep working with the journal closed. Skipped while the cursor
+    -- holds something (AssignAction clears it).
+    if not ns.barsMigrated and not (GetCursorInfo and GetCursorInfo()) then
+        ns.barsMigrated = true
+        for seq, itemID in pairs(binds) do
+            PlaceOnGamepadBar(seq, itemID)
+        end
+    end
 end
 
 UpdateLegend = function(ui)
@@ -889,10 +1343,22 @@ UpdateLegend = function(ui)
         Set(ui.legendY, "Destroy")
         Set(ui.legendA, "Unequip")
     end
+    if ui.focus == 1 then
+        local info = hasItem and b.bag and ItemInfo(b.bag, b.slot)
+        Set(ui.legendL3,
+            info and info.stackCount and info.stackCount > 1 and "Split"
+            or nil)
+        Set(ui.legendR3, info and ItemUsable(info)
+            and (ItemBound(info.itemID) and "Unbind" or "Bind") or nil)
+    else
+        Set(ui.legendL3, "Reset rot")
+        Set(ui.legendR3, "Reset zoom")
+    end
     -- Navigate hugs the leftmost visible action, or the right edge itself.
     local nav = ui.legendNav
     nav:ClearAllPoints()
-    for _, e in ipairs({ ui.legendX, ui.legendY, ui.legendA }) do
+    for _, e in ipairs({ ui.legendL3, ui.legendR3, ui.legendX, ui.legendY,
+        ui.legendA }) do
         if e.glyph:IsShown() then
             nav:SetPoint("RIGHT", e.glyph, "LEFT", -26, 0)
             return
@@ -908,7 +1374,7 @@ ns.RegisterPage(3, {
     ownSubBar = true,
     PadBind = function()
         local ui = ns.invUI
-        return ui and ui.focus == 1 and ui.useBtn ~= nil
+        return ui and ui.focus == 1 and ui.useBtn ~= nil and not ui.dlgOpen
     end,
     OnPadReset = function()
         local ui = ns.invUI
@@ -1122,10 +1588,10 @@ ns.RegisterPage(3, {
         local legend = CreateFrame("Frame", nil, f)
         legend:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
         legend:SetSize(600, 30)
-        local function LegendEntry(pad, prev)
+        local function LegendEntry(pad, prev, fb)
             local label = T.CreateFontString(legend, 15, TEXT)
             local glyph = T.CreateFontString(legend, 15, T.colors.accent)
-            glyph:SetText(ns.PadGlyph(pad, pad))
+            glyph:SetText(ns.PadGlyph(pad, fb or pad))
             if prev then
                 label:SetPoint("RIGHT", prev.glyph, "LEFT", -26, 0)
             else
@@ -1137,7 +1603,32 @@ ns.RegisterPage(3, {
         ui.legendA = LegendEntry("PAD1")
         ui.legendY = LegendEntry("PAD4", ui.legendA)
         ui.legendX = LegendEntry("PAD3", ui.legendY)
+        ui.legendR3 = LegendEntry("PADRSTICK", ui.legendX, "R3")
+        ui.legendL3 = LegendEntry("PADLSTICK", ui.legendR3, "L3")
         ui.legend = legend
+
+        -- Shared small dialog for the split stepper and the bind capture.
+        local dlg = CreateFrame("Frame", nil, f)
+        ui.dlg = dlg
+        dlg:SetSize(430, 170)
+        dlg:SetPoint("CENTER", f, "CENTER")
+        dlg:SetFrameLevel(f:GetFrameLevel() + 60)
+        T.ApplyBackdrop(dlg)
+        -- Dialog layout: 16px padding all around; title, body, then the
+        -- bottom button bar, each section 16px apart; errors sit in the
+        -- body 8px under the active element. Size wraps the content.
+        dlg.title = T.CreateFontString(dlg, 17, TEXT)
+        dlg.title:SetPoint("TOP", 0, -16)
+        -- Button bar: input hints (and later real buttons for
+        -- mouse/keyboard) live here, right-aligned.
+        dlg.hint = T.CreateFontString(dlg, 13, DIM_COLOR)
+        dlg.hint:SetPoint("BOTTOMRIGHT", -16, 16)
+        dlg.hint:SetJustifyH("RIGHT")
+        dlg.body = T.CreateFontString(dlg, 15, TEXT)
+        dlg.body:SetPoint("TOP", dlg.title, "BOTTOM", 0, -16)
+        dlg.err = T.CreateFontString(dlg, 14, { 0.92, 0.30, 0.25, 1 })
+        dlg.err:SetPoint("TOP", dlg.body, "BOTTOM", 0, -8)
+        dlg:Hide()
         local nav = T.CreateFontString(legend, 15, TEXT)
         ui.legendNav = nav
         local up = ns.PadGlyph("PADDUP")
@@ -1145,7 +1636,7 @@ ns.RegisterPage(3, {
         local dpad = (up and up:find("|") and down and down:find("|"))
             and (up .. down) or "D-Pad"
         nav:SetText(dpad .. "  Navigate")
-        nav:SetPoint("RIGHT", ui.legendX.glyph, "LEFT", -26, 0)
+        nav:SetPoint("RIGHT", ui.legendL3.glyph, "LEFT", -26, 0)
 
         -- Held D-pad repeats with the same gentle ramp as the quest list.
         ui.dpadHold = {}
@@ -1228,6 +1719,10 @@ ns.RegisterPage(3, {
             return
         end
         if button == "PADLSTICK" then
+            if ui.focus == 1 then
+                OpenSplitDlg(ui)
+                return
+            end
             local m = ui.model
             ui.modelYaw, ui.modelPitch = 0, 0
             if m and m.SetFacing then m:SetFacing(0) end
@@ -1235,6 +1730,28 @@ ns.RegisterPage(3, {
                 if m and m.SetPitch then m:SetPitch(0) end
             end)
         elseif button == "PADRSTICK" then
+            if ui.focus == 1 then
+                local b = ui.selected
+                local info = b and b.bag and ItemInfo(b.bag, b.slot)
+                local itemID = info and info.itemID
+                local seqs = itemID and BindsForItem(itemID)
+                if seqs then
+                    local name = info.itemName
+                        or (GetItemInfo and GetItemInfo(itemID)) or "item"
+                    local g = {}
+                    for _, s in ipairs(seqs) do
+                        g[#g + 1] = SeqGlyphs(s)
+                    end
+                    ns:ShowConfirm("Unbind " .. name,
+                        table.concat(g, "   "), "Unbind",
+                        function()
+                            UnbindItem(ui, itemID, name)
+                        end)
+                else
+                    OpenBindDlg(ui)
+                end
+                return
+            end
             local m = ui.model
             if not m then return end
             ui.modelZoom = 1
@@ -1296,5 +1813,10 @@ ns.RegisterPage(3, {
         local ui = ns.invUI
         if ui and ui.dpadHold then wipe(ui.dpadHold) end
         if ui then HideItemTip(ui) end
+        ns.padCapture = nil
+        if ui then
+            ui.dlgOpen, ui.split, ui.bindCap = nil, nil, nil
+            if ui.dlg then ui.dlg:Hide() end
+        end
     end,
 })

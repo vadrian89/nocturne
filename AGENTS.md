@@ -214,6 +214,18 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   knowledge (API quirks, conventions).
 - Visuals: Blizzard-native look — `UI-Tooltip-Background` / `UI-Tooltip-Border`
   via `Theme.ApplyBackdrop`; theme constants live in `Nocturne_Core/Theme.lua`.
+- Dialog layout rule (Journal dialogs: `ui.dlg`, `ns.confirm`, future ones):
+  - 16px padding on every edge of the dialog.
+  - Vertical sections, top to bottom: **title**, 16px gap, **body**, 16px
+    gap, **button bar**.
+  - The button bar holds input hints (pad glyph + action, e.g.
+    `B Cancel`) and later real mouse/keyboard buttons — right-aligned.
+  - Error messages live in the body, 8px under the last content line
+    (the active element).
+  - Frame size shrink-wraps the content — measure with
+    `ns:FitDialog(dialog)` (Journal `Shell.lua`) after every text change;
+    it accounts for inline pad-glyph atlases (`|A:...|a`) that
+    `GetStringWidth/Height` don't measure (+24w / +10h per glyph).
 - Shared helpers go into `_G.Nocturne` (`Print`, `Debug`, `RegisterModule`,
   `RegisterEvent`, `ShowCopyText`, `Theme`) — defined in `Nocturne_Core`.
 - Per-addon state lives in `ns`; SavedVariables defaults in `DB.lua` merged
