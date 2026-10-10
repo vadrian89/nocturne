@@ -8,6 +8,8 @@ local MARGIN, GAP = ns.JournalMargin, ns.JournalGap
 
 local CELL, CELL_GAP = 44, 6
 local BAG_CELL = 66
+local SLOT_ATLAS = "bags-item-slot64"
+local QUALITY_FRAME = "Interface\\Common\\WhiteIconFrame"
 local HEADER_H = 30
 local PAD = 40
 local STATS_W = 230
@@ -53,14 +55,18 @@ local function NewCell(parent)
     b:SetSize(CELL, CELL)
     b.bg = b:CreateTexture(nil, "BACKGROUND")
     b.bg:SetAllPoints()
-    b.bg:SetColorTexture(0, 0, 0, 0.4)
-    b.q = b:CreateTexture(nil, "BACKGROUND", nil, 1)
-    b.q:SetPoint("TOPLEFT", -2, 2)
-    b.q:SetPoint("BOTTOMRIGHT", 2, -2)
-    b.q:Hide()
+    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(SLOT_ATLAS) then
+        b.bg:SetAtlas(SLOT_ATLAS)
+    else
+        b.bg:SetColorTexture(0, 0, 0, 0.4)
+    end
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetAllPoints()
     b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b.q = b:CreateTexture(nil, "ARTWORK", nil, 2)
+    b.q:SetAllPoints()
+    b.q:SetTexture(QUALITY_FRAME)
+    b.q:Hide()
     b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
     b.count:SetPoint("BOTTOMRIGHT", -2, 1)
     b.sel = b:CreateTexture(nil, "OVERLAY")
@@ -80,7 +86,7 @@ local function QualityBorder(b, quality)
             r, g, bl = C_Item.GetItemQualityColor(quality)
         end
         if r then
-            b.q:SetColorTexture(r, g, bl, 1)
+            b.q:SetVertexColor(r, g, bl)
             b.q:Show()
             return
         end
