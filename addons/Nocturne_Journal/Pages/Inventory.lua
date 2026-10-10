@@ -442,6 +442,54 @@ local SLOT_NAMES = {
     RangedSlot = "Ranged",
 }
 
+-- EquipLoc (from GetItemInfoInstant) -> candidate inventory slot ids.
+local INVTYPE_SLOTS = {
+    INVTYPE_HEAD = { 1 },
+    INVTYPE_NECK = { 2 },
+    INVTYPE_SHOULDER = { 3 },
+    INVTYPE_BODY = { 4 },
+    INVTYPE_CHEST = { 5 },
+    INVTYPE_ROBE = { 5 },
+    INVTYPE_WAIST = { 6 },
+    INVTYPE_LEGS = { 7 },
+    INVTYPE_FEET = { 8 },
+    INVTYPE_WRIST = { 9 },
+    INVTYPE_HAND = { 10 },
+    INVTYPE_FINGER = { 11, 12 },
+    INVTYPE_TRINKET = { 13, 14 },
+    INVTYPE_CLOAK = { 15 },
+    INVTYPE_WEAPON = { 16, 17 },
+    INVTYPE_2HWEAPON = { 16 },
+    INVTYPE_WEAPONMAINHAND = { 16 },
+    INVTYPE_WEAPONOFFHAND = { 17 },
+    INVTYPE_SHIELD = { 17 },
+    INVTYPE_HOLDABLE = { 17 },
+    INVTYPE_RANGED = { 18 },
+    INVTYPE_RANGEDRIGHT = { 18 },
+    INVTYPE_THROWN = { 18 },
+    INVTYPE_RELIC = { 18 },
+    INVTYPE_TABARD = { 19 },
+}
+
+-- An unmet equip requirement (armor type, level, class...) shows up as red
+-- text in the item tooltip. C_TooltipInfo gives the same lines without
+-- touching the visible GameTooltip.
+local function ItemRestricted(bag, slot)
+    if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then
+        return false
+    end
+    local ok, data = pcall(C_TooltipInfo.GetBagItem, bag, slot)
+    if not (ok and data and data.lines) then return false end
+    for _, line in ipairs(data.lines) do
+        for _, col in ipairs({ line.leftColor, line.rightColor }) do
+            if col and col.r and col.r > 0.9 and col.g < 0.3 and col.b < 0.3 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function RenderEquipCell(b, slotID, slotName)
     local link = GetInventoryItemLink and GetInventoryItemLink("player", slotID)
     local icon = GetInventoryItemTexture and GetInventoryItemTexture("player", slotID)
@@ -610,6 +658,35 @@ function ns:InventorySelect()
             ui.sbar:SetValue(top)
         elseif top + h > pos + vh then
             ui.sbar:SetValue(top + h - vh)
+        end
+    end
+    -- Highlight the equip slot(s) a selected bag item would go into.
+    local hits, blocked
+    if b and b.bag then
+        local info = ItemInfo(b.bag, b.slot)
+        local id = info and info.itemID
+        if id and C_Item and C_Item.GetItemInfoInstant then
+            local equipLoc = select(4, C_Item.GetItemInfoInstant(id))
+            hits = equipLoc and INVTYPE_SLOTS[equipLoc]
+            if hits then blocked = ItemRestricted(b.bag, b.slot) end
+        end
+    end
+    local hr, hg, hb = 1, 0.82, 0.2
+    if blocked then hr, hg, hb = 1, 0.15, 0.1 end
+    for _, eb in ipairs(ui.equipCells or {}) do
+        if eb.eqHl then
+            local show = hits ~= nil
+            if show then
+                show = false
+                for _, sid in ipairs(hits) do
+                    if sid == eb.slotID then
+                        show = true
+                        break
+                    end
+                end
+            end
+            if show then eb.eqHl:SetColorTexture(hr, hg, hb, 0.45) end
+            eb.eqHl:SetShown(show)
         end
     end
     SyncUseButton(ui)
@@ -999,6 +1076,12 @@ ns.RegisterPage(3, {
                 ns.invUI.selected = self
                 ns:InventorySelect()
             end)
+            b.eqHl = b:CreateTexture(nil, "OVERLAY", nil, 3)
+            b.eqHl:SetPoint("TOPLEFT", -4, 4)
+            b.eqHl:SetPoint("BOTTOMRIGHT", 4, -4)
+            b.eqHl:SetColorTexture(1, 0.82, 0.2, 0.45)
+            b.eqHl:SetBlendMode("ADD")
+            b.eqHl:Hide()
             b.slotID, b.slotName = slotID, slotName
             ui.equipCells[#ui.equipCells + 1] = b
             return b
@@ -1144,7 +1227,25 @@ ns.RegisterPage(3, {
             end
             return
         end
-        if button == "PAD3" then
+        if button == "PADLSTICK" then
+            local m = ui.model
+            ui.modelYaw, ui.modelPitch = 0, 0
+            if m and m.SetFacing then m:SetFacing(0) end
+            pcall(function()
+                if m and m.SetPitch then m:SetPitch(0) end
+            end)
+        elseif button == "PADRSTICK" then
+            local m = ui.model
+            if not m then return end
+            ui.modelZoom = 1
+            pcall(function()
+                if m.SetCamDistanceScale then
+                    m:SetCamDistanceScale(1)
+                elseif m.SetPosition then
+                    m:SetPosition(0, 0, 0)
+                end
+            end)
+        elseif button == "PAD3" then
             PadPickup(ui)
         elseif button == "PAD4" then
             PadDestroy(ui)

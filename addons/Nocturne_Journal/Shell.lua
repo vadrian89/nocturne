@@ -204,11 +204,41 @@ function ns:CreateShell()
     -- (sticks drive camera/cursor), so poll the mapped stick state while
     -- the journal is open. Disabled once real stick events arrive.
     local gp = C_GamePad
+    ns.padStickBtn = {}
     f:SetScript("OnUpdate", function(_, dt)
-        if ns.stickEvents then return end
         if not (gp and gp.GetActiveDeviceID and gp.GetDeviceMappedState) then return end
         local id = gp.GetActiveDeviceID()
         local state = id and gp.GetDeviceMappedState(id)
+        if not state then return end
+        -- Stick clicks never reach OnGamePadButtonDown (client bindings eat
+        -- them) and override bindings for them don't take. The mapped state
+        -- still reports them, so detect edges ourselves.
+        if state.buttons and gp.ButtonIndexToConfigName then
+            ns.diagPadBtns = ns.diagPadBtns or {}
+            for i = 1, #state.buttons do
+                local name = gp.ButtonIndexToConfigName(i)
+                if name then
+                    ns.diagPadBtns[i] = name
+                    -- PADLSTICK/PADRSTICK are the L3/R3 clicks; the
+                    -- PADxSTICK<dir> entries are axis directions.
+                    local k = (name == "PADLSTICK" or name == "PADRSTICK")
+                        and name or nil
+                    if k then
+                        local down = state.buttons[i] and true or false
+                        local was = ns.padStickBtn[i]
+                        if down ~= was then
+                            ns.padStickBtn[i] = down
+                            if down then
+                                ns:OnPadButton(k)
+                            else
+                                ns:OnPadButtonUp(k)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if ns.stickEvents then return end
         if not (state and state.sticks) then return end
         if not ns.stickIdxR then
             for i = 1, #state.sticks do
@@ -399,8 +429,15 @@ local PAD_KEYS = {
     "PAD2", "PAD3", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT",
     "PADLSHOULDER", "PADRSHOULDER", "PADLTRIGGER", "PADRTRIGGER", "PADBACK",
 }
+-- Stick clicks (L3/R3) carry client bindings (ping etc.), so they never
+-- reach OnGamePadButtonDown. They are override-bound for the whole time the
+-- journal is open, not just in PadBind mode. Button polling in OnUpdate is
+-- the actual delivery path; these bindings mainly keep the client function
+-- (e.g. ping) from firing while the journal is open.
+local STICK_KEYS = { "PADLSTICK", "PADRSTICK" }
 local padOwner = CreateFrame("Frame")
-for _, key in ipairs(PAD_KEYS) do
+local stickOwner = CreateFrame("Frame")
+local function PadForward(key)
     local b = CreateFrame("Button", "NocturneJournalPad_" .. key, UIParent)
     b:SetSize(1, 1)
     b:SetAlpha(0)
@@ -413,9 +450,24 @@ for _, key in ipairs(PAD_KEYS) do
         if down then ns:OnPadButton(key) else ns:OnPadButtonUp(key) end
     end)
 end
+for _, key in ipairs(PAD_KEYS) do PadForward(key) end
+for _, key in ipairs(STICK_KEYS) do PadForward(key) end
 
 function ns:UpdatePadMode()
     if not ns.frame or InCombatLockdown() then return end
+    -- Stick-click overrides follow the journal's own visibility; unlike
+    -- PadBind they are needed in every mode.
+    local shown = ns.frame:IsShown() and true or false
+    if shown ~= (ns.stickBound or false) then
+        ns.stickBound = shown
+        ClearOverrideBindings(stickOwner)
+        if shown then
+            for _, key in ipairs(STICK_KEYS) do
+                SetOverrideBindingClick(stickOwner, true, key,
+                    "NocturneJournalPad_" .. key, "LeftButton")
+            end
+        end
+    end
     local def = ns.pages[ns.current]
     local want = ns.frame:IsShown() and def and def.PadBind
         and not (ns.modal and ns.modal:IsShown())

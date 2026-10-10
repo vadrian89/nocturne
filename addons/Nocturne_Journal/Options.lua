@@ -58,6 +58,14 @@ function ns:DiagText()
     for name, count in pairs(ns.stickCounts or {}) do
         add(("  %s x%d"):format(name, count))
     end
+    if ns.diagPadBtns then
+        local names = {}
+        for i, name in pairs(ns.diagPadBtns) do
+            names[#names + 1] = ("%s=%s"):format(tostring(i), tostring(name))
+        end
+        table.sort(names)
+        add("pad buttons: " .. table.concat(names, ", "))
+    end
     add("atlases:")
     for i, def in ipairs(ns.pages) do
         add(("  %s: %s"):format(def.title, tostring(ns.diagAtlas[def.key] or "-")))
