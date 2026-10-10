@@ -930,6 +930,32 @@ local function OpenDlg(ui, title, hint)
     ns:UpdatePadMode()
 end
 
+-- Character model state: yaw, camera distance scale (zoom) and a pan offset
+-- in the frame. The right stick drives it, R3 resets it.
+local PAN_MAX = 1.5
+
+local function ApplyModel(ui)
+    local m = ui.model
+    if not m then return end
+    if m.SetFacing then m:SetFacing(ui.modelYaw) end
+    pcall(function()
+        local depth = 0
+        if m.SetCamDistanceScale then
+            m:SetCamDistanceScale(ui.modelZoom)
+        else
+            depth = 1 - ui.modelZoom
+        end
+        if m.SetPosition then
+            m:SetPosition(depth, ui.modelPanX, ui.modelPanY)
+        end
+    end)
+end
+
+local function ResetModel(ui)
+    ui.modelYaw, ui.modelZoom, ui.modelPanX, ui.modelPanY = 0, 1, 0, 0
+    ApplyModel(ui)
+end
+
 -- Dialog option rows: a highlighted row per option in the dialog's content
 -- frame (it replaces the body text).
 local MENU_FONT, MENU_ROW_H, MENU_GAP, MENU_PAD = 20, 32, 10, 16
@@ -1485,13 +1511,12 @@ UpdateLegend = function(ui)
         Set(ui.legendY, nil)
         Set(ui.legendB, "Destroy")
     end
-    Set(ui.legendL3, ui.focus ~= 1 and "Reset rot" or nil)
-    Set(ui.legendR3, ui.focus ~= 1 and "Reset zoom" or nil)
+    Set(ui.legendR3, "Reset model")
     -- Visible entries pack against the right edge (right to left); Navigate
     -- hugs the leftmost one.
     local last
     for _, e in ipairs({ ui.legendA, ui.legendX, ui.legendY, ui.legendB,
-        ui.legendR3, ui.legendL3 }) do
+        ui.legendR3 }) do
         if e.glyph:IsShown() then
             e.label:ClearAllPoints()
             if last then
@@ -1661,9 +1686,7 @@ ns.RegisterPage(3, {
             model:SetPoint("BOTTOM", wstats, "TOP", 0, 10)
             model:SetAlpha(0.9)
             pcall(function() model:SetUnit("player") end)
-            ui.modelYaw = 0
-            ui.modelPitch = 0
-            ui.modelZoom = 1
+            ui.modelYaw, ui.modelZoom, ui.modelPanX, ui.modelPanY = 0, 1, 0, 0
         end
 
         -- Right column: all stats except Weapons, full height.
@@ -1749,7 +1772,6 @@ ns.RegisterPage(3, {
         ui.legendY = LegendEntry("PAD4", ui.legendX)
         ui.legendB = LegendEntry("PAD2", ui.legendY)
         ui.legendR3 = LegendEntry("PADRSTICK", ui.legendB, "R3")
-        ui.legendL3 = LegendEntry("PADLSTICK", ui.legendR3, "L3")
         ui.legend = legend
 
         -- Shared small dialog for the split stepper and the bind capture.
@@ -1786,7 +1808,27 @@ ns.RegisterPage(3, {
         local dpad = (up and up:find("|") and down and down:find("|"))
             and (up .. down) or "D-Pad"
         nav:SetText(dpad .. "  Navigate")
-        nav:SetPoint("RIGHT", ui.legendL3.glyph, "LEFT", -26, 0)
+        nav:SetPoint("RIGHT", ui.legendR3.glyph, "LEFT", -26, 0)
+        local view = T.CreateFontString(legend, 15, TEXT)
+        ui.legendView = view
+        -- Direction glyphs come from the binding text of the stick axes;
+        -- without icons for them, fall back to plain "R Stick".
+        local function Axes(a, b)
+            local ga = ns.PadGlyph(a, "")
+            local gb = ns.PadGlyph(b, "")
+            if ga:find("|") and gb:find("|") then return ga .. gb end
+        end
+        local lr = Axes("PADRSTICKLEFT", "PADRSTICKRIGHT")
+        local ud = Axes("PADRSTICKUP", "PADRSTICKDOWN")
+        local rt = ns.PadGlyph("PADRTRIGGER", "RT")
+        if lr and ud then
+            view:SetText(("%s  Rotate      %s  Zoom      %s + %s%s  Move")
+                :format(lr, ud, rt, lr, ud))
+        else
+            view:SetText(("R Stick  Rotate / Zoom      %s + R Stick  Move")
+                :format(rt))
+        end
+        view:SetPoint("RIGHT", nav, "LEFT", -26, 0)
 
         -- Held D-pad repeats with the same gentle ramp as the quest list.
         ui.dpadHold = {}
@@ -1868,26 +1910,8 @@ ns.RegisterPage(3, {
             end
             return
         end
-        if button == "PADLSTICK" then
-            if ui.focus == 1 then return end
-            local m = ui.model
-            ui.modelYaw, ui.modelPitch = 0, 0
-            if m and m.SetFacing then m:SetFacing(0) end
-            pcall(function()
-                if m and m.SetPitch then m:SetPitch(0) end
-            end)
-        elseif button == "PADRSTICK" then
-            if ui.focus == 1 then return end
-            local m = ui.model
-            if not m then return end
-            ui.modelZoom = 1
-            pcall(function()
-                if m.SetCamDistanceScale then
-                    m:SetCamDistanceScale(1)
-                elseif m.SetPosition then
-                    m:SetPosition(0, 0, 0)
-                end
-            end)
+        if button == "PADRSTICK" then
+            ResetModel(ui)
         elseif button == "PAD1" then
             PadMove(ui)
         elseif button == "PAD3" then
@@ -1906,38 +1930,28 @@ ns.RegisterPage(3, {
     end,
     OnStick = function(f, stick, x, y, dt)
         local ui = ns.invUI
-        local m = ui and ui.model
-        if not m then return end
+        if not (ui and ui.model) then return end
         local name = stick or ""
-        local step = (dt or 0.05) * 0.6
-        if name:find("Left") or name:find("Move") or name == "PADLSTICK" then
-            x, y = StickAxis(x), StickAxis(y)
-            if x ~= 0 then
-                ui.modelYaw = (ui.modelYaw or 0) + x * step * 2
-                if m.SetFacing then m:SetFacing(ui.modelYaw) end
-            end
-            if y ~= 0 then
-                ui.modelPitch = math.max(-1.2, math.min(1.2,
-                    (ui.modelPitch or 0) + y * step * 1.5))
-                pcall(function()
-                    if m.SetPitch then m:SetPitch(ui.modelPitch) end
-                end)
-            end
-        elseif name:find("Right") or name:find("Camera") or name == "PADRSTICK" then
-            y = StickAxis(y)
-            if y ~= 0 then
-                local z = math.max(0.4, math.min(3,
-                    (ui.modelZoom or 1) + y * step))
-                ui.modelZoom = z
-                pcall(function()
-                    if m.SetCamDistanceScale then
-                        m:SetCamDistanceScale(z)
-                    elseif m.SetPosition then
-                        m:SetPosition(0, 0, 1 - z)
-                    end
-                end)
-            end
+        if not (name:find("Right") or name:find("Camera")
+            or name == "PADRSTICK") then
+            return
         end
+        x, y = StickAxis(x), StickAxis(y)
+        if x == 0 and y == 0 then return end
+        local step = (dt or 0.05) * 0.6
+        if ns.IsPadHeld("PADRTRIGGER") then
+            -- RT is a modifier here, not the sub-page switch.
+            ns.trigUsed.PADRTRIGGER = true
+            ui.modelPanX = math.max(-PAN_MAX, math.min(PAN_MAX,
+                ui.modelPanX + x * step))
+            ui.modelPanY = math.max(-PAN_MAX, math.min(PAN_MAX,
+                ui.modelPanY + y * step))
+        else
+            ui.modelYaw = ui.modelYaw + x * step * 2
+            ui.modelZoom = math.max(0.4, math.min(3,
+                ui.modelZoom - y * step))
+        end
+        ApplyModel(ui)
     end,
     OnHide = function()
         local ui = ns.invUI

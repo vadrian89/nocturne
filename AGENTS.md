@@ -124,6 +124,10 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   to render a description line; the extent is measured off a scratch
   FontString (element width ~620px).
 
+- *(Unverified.)* Journal inventory model pan: `PlayerModel:SetPosition(x, y, z)`
+  is assumed x = depth, y = horizontal, z = vertical. LT/RT switch the
+  sub-page on release (skipped if a modifier use happened while held).
+
 ## DRY
 
 - Never duplicate logic across addons — shared behavior (logging, theming,

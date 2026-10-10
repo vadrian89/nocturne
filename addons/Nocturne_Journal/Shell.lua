@@ -467,8 +467,20 @@ function ns:ShowConfirm(text, detail, confirmLabel, onConfirm)
     ns:UpdatePadMode()
 end
 
+-- LT/RT switch the sub-page on release, and only when nothing else was done
+-- while they were held (a page may use RT + stick as a modifier).
+ns.trigDown, ns.trigUsed = {}, {}
+
 function ns:OnPadButtonUp(button)
     if ns.padHeldKeys then ns.padHeldKeys[button] = nil end
+    if ns.trigDown[button] then
+        ns.trigDown[button] = nil
+        if not ns.trigUsed[button] and not ns.padCapture
+            and not (ns.modal and ns.modal:IsShown()) then
+            ns:SetSubPage(ns.subCurrent + (button == "PADRTRIGGER" and 1 or -1))
+        end
+        return
+    end
     if button == "PADLSTICK" or button == "PADRSTICK" then
         local now = GetTime()
         ns.stickDedupUp = ns.stickDedupUp or {}
@@ -587,6 +599,8 @@ local function IsHeld(name)
         or (ns.padHeldKeys and ns.padHeldKeys[name]) or nil
 end
 
+ns.IsPadHeld = function(name) return IsHeld(name) and true or false end
+
 function ns:UpdateChordBinds()
     local want = {}
     local ui = ns.invUI
@@ -645,6 +659,7 @@ function ns:OnPadButton(button)
         ns.stickDedup[button] = now
     end
     ns.padCounts[button] = (ns.padCounts[button] or 0) + 1
+    for t in pairs(ns.trigDown) do ns.trigUsed[t] = true end
     -- A page dialog (split/bind) swallows every press while it is open.
     if ns.padCapture then
         ns.padCapture(button, true)
@@ -665,10 +680,8 @@ function ns:OnPadButton(button)
         ns:SetPage((ns.current == 0 and 1 or ns.current) - 1)
     elseif button == "PADRSHOULDER" then
         ns:SetPage((ns.current == 0 and 1 or ns.current) + 1)
-    elseif button == "PADLTRIGGER" then
-        ns:SetSubPage(ns.subCurrent - 1)
-    elseif button == "PADRTRIGGER" then
-        ns:SetSubPage(ns.subCurrent + 1)
+    elseif button == "PADLTRIGGER" or button == "PADRTRIGGER" then
+        ns.trigDown[button], ns.trigUsed[button] = true, nil
     elseif button == "PAD2" or button == "PADBACK" then
         -- A page may claim B for itself (Inventory: destroy); Select always closes.
         local def = ns.pages[ns.current]
