@@ -810,9 +810,9 @@ end
 Nocturne.RegisterEvent("UNIT_SPELLCAST_START", CloseOnUseCast)
 Nocturne.RegisterEvent("UNIT_SPELLCAST_CHANNEL_START", CloseOnUseCast)
 
--- Item use is a protected call, so A cannot touch the bag directly. A
+-- Item use is a protected call, so X cannot touch the bag directly. A
 -- hidden secure button carries the action instead, driven by a real
--- override-binding click on PAD1 (secure execution context).
+-- override-binding click on PAD3 (secure execution context).
 local function EnsureUseButton(ui)
     if ui.useBtn then return true end
     if InCombatLockdown and InCombatLockdown() then return false end
@@ -847,8 +847,8 @@ SyncUseButton = function(ui)
         (info.hyperlink or ("item:" .. info.itemID)) or nil)
 end
 
--- Pad actions, mirroring the native gamepad bag controls: A uses/equips
--- (unequips on the doll), X picks the item up for moving, Y destroys.
+-- Pad actions: A moves (picks up / drops on the cursor), X uses or equips
+-- (unequips on the doll), Y opens the "More" menu, B destroys.
 local function PadUse(ui)
     local b = ui.selected
     if not b then return end
@@ -861,22 +861,26 @@ local function PadUse(ui)
     end
 end
 
-local function PadPickup(ui)
+local function PadMove(ui)
     local b = ui.selected
-    if ui.focus ~= 1 or not b or not b.bag then return end
-    if C_Container.PickupContainerItem then
-        C_Container.PickupContainerItem(b.bag, b.slot)
+    if not b then return end
+    if ui.focus == 1 then
+        if b.bag and C_Container.PickupContainerItem then
+            C_Container.PickupContainerItem(b.bag, b.slot)
+        end
+    elseif b.slotID and _G.PickupInventoryItem then
+        PickupInventoryItem(b.slotID)
     end
 end
 
 local function PadDestroy(ui)
     local b = ui.selected
-    if not b then return end
+    if not b then return false end
     local name, destroy
     if ui.focus == 1 then
-        if not b.bag then return end
+        if not b.bag then return false end
         local info = C_Container.GetContainerItemInfo(b.bag, b.slot)
-        if not info or not info.itemID then return end
+        if not info or not info.itemID then return false end
         name = info.itemName
             or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
         destroy = function()
@@ -884,7 +888,7 @@ local function PadDestroy(ui)
             if DeleteCursorItem then DeleteCursorItem() end
         end
     else
-        if not b.link then return end
+        if not b.link then return false end
         name = (C_Item and C_Item.GetItemNameByID
                 and C_Item.GetItemNameByID(b.link))
             or (GetItemInfo and GetItemInfo(b.link)) or "item"
@@ -894,10 +898,11 @@ local function PadDestroy(ui)
         end
     end
     ns:ShowConfirm(("Destroy \"%s\"?"):format(name), nil, "Destroy", destroy)
+    return true
 end
 
 -- Small in-page dialogs (split stepper, bind capture) swallow all pad input
--- through ns.padCapture and drop PadBind so PAD1 reaches the capture too.
+-- through ns.padCapture and drop PadBind so every key reaches the capture.
 local function CloseDlg(ui)
     ns.padCapture = nil
     ui.dlgOpen = nil
@@ -917,10 +922,63 @@ local function OpenDlg(ui, title, hint)
     d.body:SetText("")
     d.err:SetText("")
     d.hint:SetText(hint or "")
+    d.content:Hide()
+    d.body:Show()
     ui.dlgOpen = true
     d:Show()
     FitDlg(d)
     ns:UpdatePadMode()
+end
+
+-- Dialog option rows: a highlighted row per option in the dialog's content
+-- frame (it replaces the body text).
+local MENU_FONT, MENU_ROW_H, MENU_GAP, MENU_PAD = 20, 32, 10, 16
+
+-- Rows show `texts`; all share the width of the widest of `texts`/`probe`.
+local function ShowRows(ui, texts, probe)
+    local menu = ui.dlg.content
+    ui.dlg.body:Hide()
+    menu:Show()
+    local width = 0
+    for i, text in ipairs(texts) do
+        local row = menu.rows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, menu)
+            row.hl = row:CreateTexture(nil, "BACKGROUND")
+            row.hl:SetAllPoints()
+            local a = T.colors.accent
+            row.hl:SetColorTexture(a[1], a[2], a[3], 0.35)
+            row.label = T.CreateFontString(row, MENU_FONT, TEXT)
+            row.label:SetPoint("CENTER")
+            menu.rows[i] = row
+        end
+        row.label:SetText(text)
+        width = math.max(width, row.label:GetStringWidth())
+    end
+    for _, text in ipairs(probe or {}) do
+        menu.rows[1].label:SetText(text)
+        width = math.max(width, menu.rows[1].label:GetStringWidth())
+    end
+    menu.rows[1].label:SetText(texts[1])
+    for i = #texts + 1, #menu.rows do menu.rows[i]:Hide() end
+    width = width + 2 * MENU_PAD
+    for i = 1, #texts do
+        local row = menu.rows[i]
+        row:SetSize(width, MENU_ROW_H)
+        row:ClearAllPoints()
+        row:SetPoint("TOP", menu, "TOP", 0, -(i - 1) * (MENU_ROW_H + MENU_GAP))
+        row:Show()
+    end
+    menu:SetSize(width, #texts * MENU_ROW_H + (#texts - 1) * MENU_GAP)
+    return menu
+end
+
+-- Button bar hints: D-pad glyphs + `dpad` label, A `a`, B `b`.
+local function PadHint(dpad, a, b)
+    local G = ns.PadGlyph
+    return ("%s%s %s      %s %s      %s %s"):format(
+        G("PADDUP", "Up"), G("PADDDOWN", "Down"), dpad,
+        G("PAD1", "A"), a, G("PAD2", "B"), b)
 end
 
 local function OpenSplitDlg(ui)
@@ -928,12 +986,15 @@ local function OpenSplitDlg(ui)
     local info = b and b.bag and ItemInfo(b.bag, b.slot)
     if not (info and info.stackCount and info.stackCount > 1) then return end
     if not C_Container.SplitContainerItem then return end
-    local name = (GetItemInfo and GetItemInfo(info.itemID)) or "item"
+    local name = info.itemName
+        or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
     ui.split = { bag = b.bag, slot = b.slot, max = info.stackCount, n = 1 }
-    OpenDlg(ui, "Split item", "D-Pad  amount        A  Split        B  Cancel")
+    OpenDlg(ui, "Split " .. name, PadHint("Amount", "Split", "Cancel"))
+    local max = ui.split.max
+    local row = ShowRows(ui, { "1 / " .. max }, { max .. " / " .. max }).rows[1]
+    row.hl:Show()
     local function Body()
-        ui.dlg.body:SetText(("Split \"%s\"\namount: %d / %d")
-            :format(name, ui.split.n, ui.split.max))
+        row.label:SetText(("%d / %d"):format(ui.split.n, max))
         FitDlg(ui.dlg)
     end
     Body()
@@ -993,10 +1054,11 @@ local function OpenSplitDlg(ui)
             C_Container.SplitContainerItem(s.bag, s.slot, s.n)
             s.placing = true
             ui.dlg.title:SetText("Place split stack")
+            ui.dlg.content:Hide()
+            ui.dlg.body:Show()
             ui.dlg.body:SetText("Move to an empty slot")
             ui.dlg.err:SetText("")
-            ui.dlg.hint:SetText(
-                "D-Pad  choose slot        A  place        B  auto")
+            ui.dlg.hint:SetText(PadHint("Choose slot", "Place", "Auto"))
             FitDlg(ui.dlg)
             return
         elseif btn == "PAD2" or btn == "PADBACK" then
@@ -1248,6 +1310,83 @@ local function OpenBindDlg(ui)
     end
 end
 
+local function ConfirmUnbind(ui)
+    local b = ui.selected
+    local info = b and b.bag and ItemInfo(b.bag, b.slot)
+    local itemID = info and info.itemID
+    local seqs = itemID and BindsForItem(itemID)
+    if not seqs then return end
+    local name = info.itemName
+        or (GetItemInfo and GetItemInfo(itemID)) or "item"
+    local g = {}
+    for _, s in ipairs(seqs) do
+        g[#g + 1] = SeqGlyphs(s)
+    end
+    ns:ShowConfirm("Unbind " .. name, table.concat(g, "   "), "Unbind",
+        function()
+            UnbindItem(ui, itemID, name)
+        end)
+end
+
+-- Y menu: actions that depend on the selected bag item.
+local function MoreOptions(ui)
+    local b = ui.selected
+    local info = ui.focus == 1 and b and b.bag and ItemInfo(b.bag, b.slot)
+    if not info then return nil end
+    local opts
+    if info.stackCount and info.stackCount > 1
+        and C_Container.SplitContainerItem then
+        opts = { { "Split", OpenSplitDlg } }
+    end
+    if ItemUsable(info) and ns.chardb and ns.chardb.binds then
+        opts = opts or {}
+        if ItemBound(info.itemID) then
+            opts[#opts + 1] = { "Unbind", ConfirmUnbind }
+        else
+            opts[#opts + 1] = { "Bind", OpenBindDlg }
+        end
+    end
+    return opts
+end
+
+local function OpenMoreMenu(ui)
+    local opts = MoreOptions(ui)
+    if not opts then return end
+    local b = ui.selected
+    local info = ItemInfo(b.bag, b.slot)
+    local name = info.itemName
+        or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
+    local sel = 1
+    OpenDlg(ui, name, PadHint("Select", "OK", "Cancel"))
+    local texts = {}
+    for i, o in ipairs(opts) do texts[i] = o[1] end
+    local menu = ShowRows(ui, texts)
+    local function Body()
+        for i = 1, #opts do menu.rows[i].hl:SetShown(i == sel) end
+        FitDlg(ui.dlg)
+    end
+    Body()
+    ns.padCapture = function(btn, down)
+        if not down then return end
+        if btn == "PADDUP" then
+            sel = sel > 1 and sel - 1 or #opts
+        elseif btn == "PADDDOWN" then
+            sel = sel < #opts and sel + 1 or 1
+        elseif btn == "PAD1" then
+            local fn = opts[sel][2]
+            CloseDlg(ui)
+            fn(ui)
+            return
+        elseif btn == "PAD2" or btn == "PADBACK" then
+            CloseDlg(ui)
+            return
+        else
+            return
+        end
+        Body()
+    end
+end
+
 local function EnsureBindButton(ui, i)
     ui.bindBtns = ui.bindBtns or {}
     if ui.bindBtns[i] then return ui.bindBtns[i] end
@@ -1331,34 +1470,28 @@ UpdateLegend = function(ui)
         end
     end
     if not hasItem then
+        Set(ui.legendA, nil)
         Set(ui.legendX, nil)
         Set(ui.legendY, nil)
-        Set(ui.legendA, nil)
+        Set(ui.legendB, nil)
     elseif ui.focus == 1 then
-        Set(ui.legendX, "Pick up")
-        Set(ui.legendY, "Destroy")
-        Set(ui.legendA, "Use")
+        Set(ui.legendA, "Move")
+        Set(ui.legendX, "Use")
+        Set(ui.legendY, MoreOptions(ui) and "More" or nil)
+        Set(ui.legendB, "Destroy")
     else
-        Set(ui.legendX, nil)
-        Set(ui.legendY, "Destroy")
-        Set(ui.legendA, "Unequip")
+        Set(ui.legendA, "Move")
+        Set(ui.legendX, "Unequip")
+        Set(ui.legendY, nil)
+        Set(ui.legendB, "Destroy")
     end
-    if ui.focus == 1 then
-        local info = hasItem and b.bag and ItemInfo(b.bag, b.slot)
-        Set(ui.legendL3,
-            info and info.stackCount and info.stackCount > 1 and "Split"
-            or nil)
-        Set(ui.legendR3, info and ItemUsable(info)
-            and (ItemBound(info.itemID) and "Unbind" or "Bind") or nil)
-    else
-        Set(ui.legendL3, "Reset rot")
-        Set(ui.legendR3, "Reset zoom")
-    end
+    Set(ui.legendL3, ui.focus ~= 1 and "Reset rot" or nil)
+    Set(ui.legendR3, ui.focus ~= 1 and "Reset zoom" or nil)
     -- Navigate hugs the leftmost visible action, or the right edge itself.
     local nav = ui.legendNav
     nav:ClearAllPoints()
-    for _, e in ipairs({ ui.legendL3, ui.legendR3, ui.legendX, ui.legendY,
-        ui.legendA }) do
+    for _, e in ipairs({ ui.legendL3, ui.legendR3, ui.legendB, ui.legendY,
+        ui.legendX, ui.legendA }) do
         if e.glyph:IsShown() then
             nav:SetPoint("RIGHT", e.glyph, "LEFT", -26, 0)
             return
@@ -1601,9 +1734,10 @@ ns.RegisterPage(3, {
             return { label = label, glyph = glyph }
         end
         ui.legendA = LegendEntry("PAD1")
-        ui.legendY = LegendEntry("PAD4", ui.legendA)
-        ui.legendX = LegendEntry("PAD3", ui.legendY)
-        ui.legendR3 = LegendEntry("PADRSTICK", ui.legendX, "R3")
+        ui.legendX = LegendEntry("PAD3", ui.legendA)
+        ui.legendY = LegendEntry("PAD4", ui.legendX)
+        ui.legendB = LegendEntry("PAD2", ui.legendY)
+        ui.legendR3 = LegendEntry("PADRSTICK", ui.legendB, "R3")
         ui.legendL3 = LegendEntry("PADLSTICK", ui.legendR3, "L3")
         ui.legend = legend
 
@@ -1626,6 +1760,11 @@ ns.RegisterPage(3, {
         dlg.hint:SetJustifyH("RIGHT")
         dlg.body = T.CreateFontString(dlg, 15, TEXT)
         dlg.body:SetPoint("TOP", dlg.title, "BOTTOM", 0, -16)
+        -- Optional body replacement (More menu rows), sized by its owner.
+        dlg.content = CreateFrame("Frame", nil, dlg)
+        dlg.content:SetPoint("TOP", dlg.title, "BOTTOM", 0, -16)
+        dlg.content.rows = {}
+        dlg.content:Hide()
         dlg.err = T.CreateFontString(dlg, 14, { 0.92, 0.30, 0.25, 1 })
         dlg.err:SetPoint("TOP", dlg.body, "BOTTOM", 0, -8)
         dlg:Hide()
@@ -1719,10 +1858,7 @@ ns.RegisterPage(3, {
             return
         end
         if button == "PADLSTICK" then
-            if ui.focus == 1 then
-                OpenSplitDlg(ui)
-                return
-            end
+            if ui.focus == 1 then return end
             local m = ui.model
             ui.modelYaw, ui.modelPitch = 0, 0
             if m and m.SetFacing then m:SetFacing(0) end
@@ -1730,28 +1866,7 @@ ns.RegisterPage(3, {
                 if m and m.SetPitch then m:SetPitch(0) end
             end)
         elseif button == "PADRSTICK" then
-            if ui.focus == 1 then
-                local b = ui.selected
-                local info = b and b.bag and ItemInfo(b.bag, b.slot)
-                local itemID = info and info.itemID
-                local seqs = itemID and BindsForItem(itemID)
-                if seqs then
-                    local name = info.itemName
-                        or (GetItemInfo and GetItemInfo(itemID)) or "item"
-                    local g = {}
-                    for _, s in ipairs(seqs) do
-                        g[#g + 1] = SeqGlyphs(s)
-                    end
-                    ns:ShowConfirm("Unbind " .. name,
-                        table.concat(g, "   "), "Unbind",
-                        function()
-                            UnbindItem(ui, itemID, name)
-                        end)
-                else
-                    OpenBindDlg(ui)
-                end
-                return
-            end
+            if ui.focus == 1 then return end
             local m = ui.model
             if not m then return end
             ui.modelZoom = 1
@@ -1762,13 +1877,17 @@ ns.RegisterPage(3, {
                     m:SetPosition(0, 0, 0)
                 end
             end)
-        elseif button == "PAD3" then
-            PadPickup(ui)
-        elseif button == "PAD4" then
-            PadDestroy(ui)
         elseif button == "PAD1" then
+            PadMove(ui)
+        elseif button == "PAD3" then
             PadUse(ui)
+        elseif button == "PAD4" then
+            OpenMoreMenu(ui)
         end
+    end,
+    OnCancel = function()
+        local ui = ns.invUI
+        return ui and PadDestroy(ui) or false
     end,
     OnPadUp = function(f, button)
         local ui = ns.invUI

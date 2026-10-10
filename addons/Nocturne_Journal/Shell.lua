@@ -183,7 +183,7 @@ function ns:CreateShell()
         c.onConfirm = nil
         if ns.modal == c then ns.modal = nil end
         -- Not at once: the confirming press is still down and its release
-        -- would hit the freshly rebound PAD1.
+        -- would hit the freshly rebound pad keys.
         C_Timer.After(0.4, function() ns:UpdatePadMode() end)
     end)
     c:Hide()
@@ -435,15 +435,19 @@ local function DlgTextW(fs)
 end
 
 -- Shrink-wrap a title/body/err/hint dialog to its content (AGENTS.md dialog
--- rule: 16px padding, sections 16px apart, err 8px under the body).
+-- rule: 16px padding, sections 16px apart, err 8px under the body). A shown
+-- d.content frame (sized by the caller) stands in for the body text.
 function ns:FitDialog(d)
-    local h = 16 + DlgTextH(d.title) + 16 + DlgTextH(d.body)
+    local content = d.content and d.content:IsShown() and d.content
+    local bodyH = content and content:GetHeight() or DlgTextH(d.body)
+    local bodyW = content and content:GetWidth() or DlgTextW(d.body)
+    local h = 16 + DlgTextH(d.title) + 16 + bodyH
     if d.err and DlgTextH(d.err) > 0 then
         h = h + 8 + DlgTextH(d.err)
     end
     h = h + 16 + math.max(DlgTextH(d.hint), 8) + 16
     d:SetHeight(math.max(80, h))
-    local w = math.max(DlgTextW(d.title), DlgTextW(d.body),
+    local w = math.max(DlgTextW(d.title), bodyW,
         d.err and DlgTextW(d.err) or 0, DlgTextW(d.hint)) + 32
     d:SetWidth(math.max(200, math.min(w, 640)))
 end
@@ -487,12 +491,12 @@ end
 -- press is consumed by OnGamePadButtonDown and never reaches the keybinding
 -- dispatcher (SetPropagateKeyboardInput is keyboard-only), so a secure
 -- button can't be clicked from the pad. A page that needs that
--- (def.PadBind) switches the shell to override bindings instead: PAD1 clicks
+-- (def.PadBind) switches the shell to override bindings instead: PAD3 clicks
 -- the page's secure button, every other key clicks a forwarding button that
 -- feeds the same OnPadButton/OnPadButtonUp handlers. Frames keep the pad
 -- sticks either way.
 local PAD_KEYS = {
-    "PAD2", "PAD3", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT",
+    "PAD1", "PAD2", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT",
     "PADLSHOULDER", "PADRSHOULDER", "PADLTRIGGER", "PADRTRIGGER", "PADBACK",
 }
 -- Stick clicks (L3/R3) carry client bindings (ping etc.), so they never
@@ -556,7 +560,7 @@ function ns:UpdatePadMode()
     ClearOverrideBindings(padOwner)
     if def and def.OnPadReset then def.OnPadReset(ns.pageFrames[ns.current]) end
     if want then
-        SetOverrideBindingClick(padOwner, true, "PAD1",
+        SetOverrideBindingClick(padOwner, true, "PAD3",
             "NocturneJournalPadUse", "LeftButton")
         for _, key in ipairs(PAD_KEYS) do
             SetOverrideBindingClick(padOwner, true, key,
@@ -666,6 +670,12 @@ function ns:OnPadButton(button)
     elseif button == "PADRTRIGGER" then
         ns:SetSubPage(ns.subCurrent + 1)
     elseif button == "PAD2" or button == "PADBACK" then
+        -- A page may claim B for itself (Inventory: destroy); Select always closes.
+        local def = ns.pages[ns.current]
+        if button == "PAD2" and def and def.OnCancel
+            and def.OnCancel(ns.pageFrames[ns.current]) then
+            return
+        end
         ns:Close()
     else
         local def = ns.pages[ns.current]
