@@ -193,23 +193,29 @@ function ns:CreateShell()
         local id = gp.GetActiveDeviceID()
         local state = id and gp.GetDeviceMappedState(id)
         if not (state and state.sticks) then return end
-        if not ns.stickIdx then
+        if not ns.stickIdxR then
             for i = 1, #state.sticks do
-                local name = gp.StickIndexToConfigName and gp.StickIndexToConfigName(i)
-                if name and (name:find("Right") or name:find("Camera")) then
-                    ns.stickIdx = i
-                    break
+                local name = gp.StickIndexToConfigName
+                    and gp.StickIndexToConfigName(i) or ""
+                if name:find("Right") or name:find("Camera") then
+                    ns.stickIdxR = i
+                elseif name:find("Left") or name:find("Movement") then
+                    ns.stickIdxL = i
                 end
             end
-            ns.stickIdx = ns.stickIdx or math.min(2, #state.sticks)
+            ns.stickIdxR = ns.stickIdxR or math.min(2, #state.sticks)
+            ns.stickIdxL = ns.stickIdxL or 1
         end
-        local s = state.sticks[ns.stickIdx]
-        local y = s and s.y or 0
-        if ns.IsSecret(y) then return end
-        if y > -0.15 and y < 0.15 then return end
         local def = ns.pages[ns.current]
-        if def and def.OnStick then
-            def.OnStick(ns.pageFrames[ns.current], "RightStick", s.x, y, dt)
+        if not (def and def.OnStick) then return end
+        for i = 1, 2 do
+            local s = state.sticks[i == 1 and ns.stickIdxL or ns.stickIdxR]
+            local x, y = s and s.x or 0, s and s.y or 0
+            if not ns.IsSecret(x) and not ns.IsSecret(y)
+                and (x > 0.15 or x < -0.15 or y > 0.15 or y < -0.15) then
+                def.OnStick(ns.pageFrames[ns.current],
+                    i == 1 and "LeftStick" or "RightStick", x, y, dt)
+            end
         end
     end)
     f:Hide()

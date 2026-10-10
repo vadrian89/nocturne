@@ -49,7 +49,7 @@ function ns:DiagText()
     add(("stick: api=%s events=%s pollIdx=%s"):format(
         tostring(not not (C_GamePad and C_GamePad.GetDeviceMappedState)),
         tostring(ns.stickEvents or false),
-        tostring(ns.stickIdx)))
+        tostring(ns.stickIdxL) .. "/" .. tostring(ns.stickIdxR)))
     for name, count in pairs(ns.stickCounts or {}) do
         add(("  %s x%d"):format(name, count))
     end
@@ -68,6 +68,27 @@ function ns:DiagText()
             #ns.questUI.list.items,
             tostring(ns.questUI.selected and ns.questUI.selected.qid),
             tostring(ns.questListDirty)))
+    end
+    if ns.invUI and ns.invUI.sbar then
+        local ui = ns.invUI
+        local lo, hi = ui.sbar:GetMinMaxValues()
+        local th = ui.sbar:GetThumbTexture()
+        add(("invBar: shown=%s h=%.0f range=%.0f..%.0f thumbH=%s scrollH=%.0f childH=%.0f"):format(
+            tostring(ui.sbar:IsShown()), ui.sbar:GetHeight(), lo, hi,
+            th and ("%.0f"):format(th:GetHeight()) or "nil",
+            ui.scroll:GetHeight(), ui.child:GetHeight()))
+        local function Box(f)
+            return ("L%.0f R%.0f T%.0f B%.0f"):format(
+                f:GetLeft() or -1, f:GetRight() or -1,
+                f:GetTop() or -1, f:GetBottom() or -1)
+        end
+        add(("invBarBox: bar[%s] vis=%s alpha=%.2f lvl=%d thumbShown=%s thumb[%s]"):format(
+            Box(ui.sbar), tostring(ui.sbar:IsVisible()),
+            ui.sbar:GetEffectiveAlpha(), ui.sbar:GetFrameLevel(),
+            tostring(th and th:IsShown()), th and Box(th) or "-"))
+        add("invBarSnapshot(0.3s after show): " .. tostring(ui.barSnap))
+        add(("invScrollBox: scroll[%s] screen=%.0fx%.0f"):format(
+            Box(ui.scroll), UIParent:GetWidth(), UIParent:GetHeight()))
     end
     if ns.invUI then
         local ub = ns.invUI.useBtn

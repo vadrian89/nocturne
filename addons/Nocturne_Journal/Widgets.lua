@@ -3,6 +3,69 @@ local _, ns = ...
 local Nocturne = _G.Nocturne
 local T = Nocturne.Theme
 
+-- Thumb sized like the native ones: proportional to the visible fraction
+-- of the content, floored so it never shrinks to nothing.
+function ns.FitScrollThumb(bar, viewport, range)
+    local track = bar:GetHeight()
+    if track <= 0 then return end
+    local total = (viewport or 0) + math.max(0, range or 0)
+    local frac = total > 0 and (viewport / total) or 1
+    bar.knobH = math.max(24, track * frac)
+end
+
+-- Plain vertical slider with a flat track and thumb. The stock scrollbar
+-- template's art (capped track, knob margins, buttons outside the slider
+-- bounds) can't be fitted flush to the scroll area.
+function ns.NewScrollBar(parent)
+    local bar = CreateFrame("Slider", nil, parent)
+    bar:SetOrientation("VERTICAL")
+    bar:SetWidth(8)
+    bar:SetFrameLevel(parent:GetFrameLevel() + 20)
+    bar:EnableMouse(true)
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetColorTexture(0, 0, 0, 0.3)
+    local a = T.colors.accent
+    -- The slider's own thumb is never laid out on this client (its rect
+    -- stays nil), so it is kept invisible and a knob is anchored by hand.
+    local thumb = bar:CreateTexture(nil, "ARTWORK")
+    thumb:SetColorTexture(0, 0, 0, 0)
+    thumb:SetSize(8, 24)
+    bar:SetThumbTexture(thumb)
+    local knob = bar:CreateTexture(nil, "OVERLAY")
+    knob:SetColorTexture(a[1], a[2], a[3], 0.9)
+    knob:SetWidth(8)
+    knob:SetHeight(24)
+    bar.knobH = 24
+    local dragging, key
+    bar:SetScript("OnMouseDown", function() dragging = true end)
+    bar:SetScript("OnMouseUp", function() dragging = false end)
+    bar:SetScript("OnUpdate", function(self)
+        local lo, hi = self:GetMinMaxValues()
+        local h = self:GetHeight()
+        local kh = math.min(self.knobH, h)
+        local travel = math.max(1, h - kh)
+        if dragging then
+            local _, cy = GetCursorPosition()
+            local top = self:GetTop()
+            if top then
+                local f = math.min(1, math.max(0,
+                    (top - cy / self:GetEffectiveScale() - kh / 2) / travel))
+                self:SetValue(lo + f * (hi - lo))
+            end
+        end
+        local v = self:GetValue()
+        local k = v .. ":" .. lo .. ":" .. hi .. ":" .. h .. ":" .. kh
+        if k == key then return end
+        key = k
+        local f = hi > lo and (v - lo) / (hi - lo) or 0
+        knob:ClearAllPoints()
+        knob:SetPoint("TOP", self, "TOP", 0, -f * travel)
+        knob:SetHeight(kh)
+    end)
+    return bar
+end
+
 -- Virtualized scroll list: a fixed pool of rows recycled over a data array,
 -- mouse wheel + draggable thumb. `initRow(row)` runs once per pooled row,
 -- `setRow(row, item)` on every relayout; `row.item` holds the bound item.
@@ -15,9 +78,9 @@ function ns.NewList(parent, o)
     frame:SetClipsChildren(true)
     list.frame = frame
 
-    local bar = CreateFrame("Slider", nil, frame, "UIPanelScrollBarTemplate")
-    bar:SetPoint("TOPRIGHT", 0, -16)
-    bar:SetPoint("BOTTOMRIGHT", 0, 16)
+    local bar = ns.NewScrollBar(frame)
+    bar:SetPoint("TOPRIGHT")
+    bar:SetPoint("BOTTOMRIGHT")
     bar:SetValueStep(rowH)
     bar:SetObeyStepOnDrag(false)
     list.bar = bar
@@ -65,6 +128,7 @@ function ns.NewList(parent, o)
         bar:SetMinMaxValues(0, math.max(1, max))
         bar:SetValue(self.offset)
         bar:SetShown(max > 0)
+        ns.FitScrollThumb(bar, frame:GetHeight(), max)
     end
 
     function list:SetOffset(off)

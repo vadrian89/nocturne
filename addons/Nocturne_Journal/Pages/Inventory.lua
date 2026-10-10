@@ -7,14 +7,22 @@ local PANEL = ns.JournalPanel
 local MARGIN, GAP = ns.JournalMargin, ns.JournalGap
 
 local CELL, CELL_GAP = 44, 6
+local BAG_CELL = 66
 local HEADER_H = 30
 local PAD = 40
+local STATS_W = 230
 
 local UpdateLegend, SyncUseButton
 
 local TEXT = { 0.95, 0.95, 0.97, 1 }
 local HEADER_COLOR = { 0.80, 0.68, 0.42, 1 }
 local DIM_COLOR = { 0.60, 0.60, 0.65, 1 }
+
+local function StickAxis(v)
+    if v == nil or ns.IsSecret(v) then return 0 end
+    if v > -0.25 and v < 0.25 then return 0 end
+    return v
+end
 
 -- Backpack..4 equipable bags; the reagent bag rides along when present.
 local function BagIDs()
@@ -78,6 +86,139 @@ local function QualityBorder(b, quality)
         end
     end
     b.q:Hide()
+end
+
+local TIP_SCALE = 1.6
+
+local function HideItemTip(ui)
+    if ui.tipOwner then
+        GameTooltip:Hide()
+        GameTooltip:SetScale(1)
+        ui.tipOwner = nil
+    end
+end
+
+local function ShowItemTip(ui, b)
+    if not (b and ui.pageFrame and ui.pageFrame:IsShown()) then return end
+    if b.bag then
+        if not ItemInfo(b.bag, b.slot) then
+            HideItemTip(ui)
+            return
+        end
+        GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+        GameTooltip:SetBagItem(b.bag, b.slot)
+    elseif b.slotID and b.link then
+        GameTooltip:SetOwner(b, b.tipAnchor or "ANCHOR_LEFT")
+        GameTooltip:SetInventoryItem("player", b.slotID)
+    else
+        HideItemTip(ui)
+        return
+    end
+    ui.tipOwner = b
+    GameTooltip:SetScale(TIP_SCALE)
+    GameTooltip:Show()
+end
+
+-- Mouse hover reroutes through the same path so the enlarged scale applies.
+local function CellEnter(self)
+    ShowItemTip(ns.invUI, self)
+end
+local function CellLeave(self)
+    local ui = ns.invUI
+    if ui and ui.selected and ui.selected ~= self then
+        ShowItemTip(ui, ui.selected)
+    elseif ui then
+        HideItemTip(ui)
+    end
+end
+
+local function StatUnit(i)
+    if not UnitStat then return nil end
+    local _, eff = UnitStat("player", i)
+    if eff == nil or ns.IsSecret(eff) then return nil end
+    return tostring(eff)
+end
+
+local function StatPct(fn, ...)
+    if not fn then return nil end
+    local v = fn(...)
+    if v == nil or ns.IsSecret(v) then return nil end
+    return ("%.1f%%"):format(v)
+end
+
+local STATS = {
+    { "Item Level", function()
+        local v = GetAverageItemLevel and GetAverageItemLevel()
+        if v == nil or ns.IsSecret(v) then return nil end
+        return ("%.1f"):format(v)
+    end },
+    { "Health", function()
+        local v = UnitHealthMax and UnitHealthMax("player")
+        if v == nil or ns.IsSecret(v) then return nil end
+        return tostring(v)
+    end },
+    { "Strength",  function() return StatUnit(1) end },
+    { "Agility",   function() return StatUnit(2) end },
+    { "Stamina",   function() return StatUnit(3) end },
+    { "Intellect", function() return StatUnit(4) end },
+    { "Armor", function()
+        if not UnitArmor then return nil end
+        local _, v = UnitArmor("player")
+        if v == nil or ns.IsSecret(v) then return nil end
+        return tostring(v)
+    end },
+    { "Critical Strike", function() return StatPct(GetCritChance) end },
+    { "Haste",           function() return StatPct(GetHaste) end },
+    { "Mastery",         function() return StatPct(GetMasteryEffect) end },
+    { "Versatility", function()
+        if not (GetCombatRatingBonus and _G.CR_VERSATILITY_DAMAGE_DONE) then
+            return nil
+        end
+        return StatPct(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
+    end },
+    { "Dodge", function() return StatPct(GetDodgeChance) end },
+    { "Parry", function() return StatPct(GetParryChance) end },
+    { "Block", function() return StatPct(GetBlockChance) end },
+    { "Speed", function()
+        if not GetUnitSpeed then return nil end
+        local v = GetUnitSpeed("player")
+        if v == nil or ns.IsSecret(v) then return nil end
+        return ("%.0f%%"):format(v / 7 * 100)
+    end },
+}
+
+local function RenderStats(ui)
+    local rows = ui.statRows
+    if not rows then return end
+    local n = 0
+    for _, s in ipairs(STATS) do
+        local ok, v = pcall(s[2])
+        if ok and v ~= nil then
+            n = n + 1
+            local r = rows[n]
+            if not r then
+                r = {
+                    label = T.CreateFontString(ui.stats, 15, DIM_COLOR),
+                    value = T.CreateFontString(ui.stats, 15, TEXT),
+                }
+                r.label:SetJustifyH("LEFT")
+                r.value:SetJustifyH("RIGHT")
+                local top = -34 - (n - 1) * 22
+                r.label:SetPoint("TOPLEFT", ui.stats, "TOPLEFT", 0, top)
+                r.value:SetPoint("TOPRIGHT", ui.stats, "TOPRIGHT", 0, top)
+                r.value:SetPoint("LEFT", ui.stats, "LEFT", 120, 0)
+                rows[n] = r
+            end
+            r.label:SetText(s[1])
+            r.value:SetText(tostring(v))
+            r.label:Show()
+            r.value:Show()
+        end
+    end
+    for i = n + 1, #rows do
+        rows[i].label:Hide()
+        rows[i].value:Hide()
+    end
 end
 
 -- One pooled fontstring row per bag header inside the scroll child.
@@ -150,8 +291,8 @@ local function RenderBags(ui)
     local combined = CombinedBags()
 
     -- Flatten into display lines: a header line or a row of cells.
-    local w = math.max(CELL, child:GetWidth() - PAD * 2)
-    local perRow = math.max(1, math.floor((w + CELL_GAP) / (CELL + CELL_GAP)))
+    local w = math.max(BAG_CELL, child:GetWidth() - PAD * 2)
+    local perRow = math.max(1, math.floor((w + CELL_GAP) / (BAG_CELL + CELL_GAP)))
     local lines, line = {}
     local function PushCell(el)
         if not line or #line == perRow then
@@ -176,6 +317,7 @@ local function RenderBags(ui)
         end
     end
 
+
     ui.navBags = {}
     local y, hi, ci = PAD, 0, 0
     for _, ln in ipairs(lines) do
@@ -196,13 +338,9 @@ local function RenderBags(ui)
                 local b = cells[ci]
                 if not b then
                     b = NewCell(child)
-                    b:SetScript("OnEnter", function(self)
-                        if not self.bag then return end
-                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                        GameTooltip:SetBagItem(self.bag, self.slot)
-                        GameTooltip:Show()
-                    end)
-                    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                    b:SetSize(BAG_CELL, BAG_CELL)
+                    b:SetScript("OnEnter", CellEnter)
+                    b:SetScript("OnLeave", CellLeave)
                     b:SetScript("OnClick", function(self)
                         ns.invUI.selected = self
                         ns:InventorySelect()
@@ -227,10 +365,10 @@ local function RenderBags(ui)
                 row[j] = b
                 b:ClearAllPoints()
                 b:SetPoint("TOPLEFT", child, "TOPLEFT",
-                    PAD + (j - 1) * (CELL + CELL_GAP), -y)
+                    PAD + (j - 1) * (BAG_CELL + CELL_GAP), -y)
                 b:Show()
             end
-            y = y + CELL + CELL_GAP
+            y = y + BAG_CELL + CELL_GAP
         end
     end
     for i = hi + 1, #ui.headers do ui.headers[i]:Hide() end
@@ -238,7 +376,9 @@ local function RenderBags(ui)
         cells[i]:Hide()
         cells[i].bag = nil
     end
-    child:SetHeight(math.max(1, y + PAD))
+    child:SetHeight(math.max(1, y + CELL_GAP))
+
+    if ui.UpdateBar then ui.UpdateBar() end
 
     -- Keep the pad selection on a live cell after reflow.
     if ui.focus ~= 2 then ui.nav = ui.navBags end
@@ -286,18 +426,20 @@ function ns:InventorySelect()
         end
     end
     local b = ui.selected
-    if b and b.bag then
+    if b and ui.focus == 1 then
         -- Reveal the cell inside the bag scroll area.
         local top = -b:GetTop() + ui.child:GetTop() -- child-local y of the cell
         local pos = ui.scroll:GetVerticalScroll()
         local vh = ui.scroll:GetHeight()
+        local h = b:GetHeight()
         if top < pos then
             ui.sbar:SetValue(top)
-        elseif top + CELL > pos + vh then
-            ui.sbar:SetValue(top + CELL - vh)
+        elseif top + h > pos + vh then
+            ui.sbar:SetValue(top + h - vh)
         end
     end
     SyncUseButton(ui)
+    ShowItemTip(ui, b)
     if UpdateLegend then UpdateLegend(ui) end
 end
 
@@ -313,6 +455,7 @@ function ns:InventoryRefresh()
     for _, b in ipairs(ui.equipCells) do
         RenderEquipCell(b, b.slotID, b.slotName)
     end
+    RenderStats(ui)
 end
 
 local function Dirty()
@@ -323,6 +466,8 @@ end
 for _, event in ipairs({
     "BAG_UPDATE", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED",
     "GET_ITEM_INFO_RECEIVED", "ITEM_LOCK_CHANGED",
+    "UNIT_STATS", "UNIT_ATTACK_POWER", "COMBAT_RATING_UPDATE",
+    "SPELL_POWER_CHANGED", "PLAYER_DAMAGE_DONE_MODS",
 }) do
     Nocturne.RegisterEvent(event, Dirty)
 end
@@ -554,10 +699,10 @@ ns.RegisterPage(3, {
         scroll:SetPoint("TOPLEFT")
         scroll:SetPoint("BOTTOMRIGHT", -28, 0)
         scroll:EnableMouseWheel(true)
-        local sbar = CreateFrame("Slider", nil, scroll, "UIPanelScrollBarTemplate")
+        local sbar = ns.NewScrollBar(scroll)
         ui.sbar = sbar
-        sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, -16)
-        sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 16)
+        sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, 0)
+        sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 0)
         sbar:SetValueStep(30)
         sbar:SetObeyStepOnDrag(false)
         sbar:SetScript("OnValueChanged", function(_, v) scroll:SetVerticalScroll(v) end)
@@ -567,11 +712,24 @@ ns.RegisterPage(3, {
         scroll:SetScript("OnScrollRangeChanged", function(_, _, yrange)
             sbar:SetMinMaxValues(0, math.max(1, yrange or 0))
             sbar:SetShown((yrange or 0) > 1)
+            ns.FitScrollThumb(sbar, scroll:GetHeight(), yrange)
         end)
         scroll:SetScript("OnVerticalScroll", function(_, off) sbar:SetValue(off) end)
         local child = CreateFrame("Frame", nil, scroll)
         scroll:SetScrollChild(child)
         ui.child = child
+
+        -- OnScrollRangeChanged does not fire reliably while the page is
+        -- hidden at build time, so the range is derived from the real sizes
+        -- whenever the content or the viewport changes.
+        ui.UpdateBar = function()
+            local vh = scroll:GetHeight()
+            local range = math.max(0, child:GetHeight() - vh)
+            sbar:SetMinMaxValues(0, math.max(1, range))
+            sbar:SetShown(range > 1)
+            ns.FitScrollThumb(sbar, vh, range)
+        end
+        scroll:SetScript("OnSizeChanged", function() ui.UpdateBar() end)
 
         -- Right: paper-doll columns + player model + weapon row.
         local ok, model = pcall(CreateFrame, "PlayerModel", nil, equip)
@@ -580,10 +738,24 @@ ns.RegisterPage(3, {
             model:SetPoint("TOP", 0, -40)
             model:SetPoint("BOTTOM", 0, 90)
             model:SetPoint("LEFT", equip, "LEFT", 100, 0)
-            model:SetPoint("RIGHT", equip, "RIGHT", -100, 0)
+            model:SetPoint("RIGHT", equip, "RIGHT", -100 - STATS_W, 0)
             model:SetAlpha(0.9)
             pcall(function() model:SetUnit("player") end)
+            ui.modelYaw = 0
+            ui.modelPitch = 0
+            ui.modelZoom = 1
         end
+
+        -- Right column: character stats, refreshed with the equipment.
+        local stats = CreateFrame("Frame", nil, equip)
+        ui.stats = stats
+        ui.statRows = {}
+        stats:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD)
+        stats:SetPoint("BOTTOMRIGHT", equip, "BOTTOMRIGHT", -PAD, PAD)
+        stats:SetWidth(STATS_W)
+        local sTitle = T.CreateFontString(stats, 22, HEADER_COLOR)
+        sTitle:SetPoint("TOPLEFT")
+        sTitle:SetText("Stats")
 
         local function EquipCell(slotID, slotName)
             local b = NewCell(equip)
@@ -591,13 +763,8 @@ ns.RegisterPage(3, {
             b.label = T.CreateFontString(b, 12, DIM_COLOR)
             b.label:SetPoint("TOP", b, "BOTTOM", 0, -2)
             b.label:SetText(SLOT_NAMES[slotName] or slotName)
-            b:SetScript("OnEnter", function(self)
-                if not self.link then return end
-                GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-                GameTooltip:SetInventoryItem("player", self.slotID)
-                GameTooltip:Show()
-            end)
-            b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            b:SetScript("OnEnter", CellEnter)
+            b:SetScript("OnLeave", CellLeave)
             b:SetScript("OnClick", function(self)
                 ns.invUI.selected = self
                 ns:InventorySelect()
@@ -615,17 +782,20 @@ ns.RegisterPage(3, {
         end
         for i, s in ipairs(EQUIP_LEFT) do
             local b = EquipCell(s[1], s[2])
+            b.tipAnchor = "ANCHOR_RIGHT"
             b:SetPoint("TOPLEFT", equip, "TOPLEFT", PAD, -PAD - (i - 1) * 78)
             NavEquip(b, i, 1)
         end
         for i, s in ipairs(EQUIP_RIGHT) do
             local b = EquipCell(s[1], s[2])
-            b:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD, -PAD - (i - 1) * 78)
+            b.tipAnchor = "ANCHOR_LEFT"
+            b:SetPoint("TOPRIGHT", equip, "TOPRIGHT", -PAD - STATS_W - 16, -PAD - (i - 1) * 78)
             NavEquip(b, i, 2)
         end
         for i, s in ipairs(EQUIP_BOTTOM) do
             local b = EquipCell(s[1], s[2])
-            b:SetPoint("BOTTOM", equip, "BOTTOM", (i - 2) * 66, PAD)
+            b.tipAnchor = "ANCHOR_TOP"
+            b:SetPoint("BOTTOM", equip, "BOTTOM", (i - 2) * 66 - (STATS_W / 2), PAD)
             NavEquip(b, 9, i)
         end
 
@@ -684,7 +854,7 @@ ns.RegisterPage(3, {
         end)
 
         local function Layout()
-            bags:SetWidth(math.floor(f:GetWidth() * 0.55) - GAP)
+            bags:SetWidth(math.floor(f:GetWidth() * 0.5) - GAP)
             child:SetWidth(math.max(10, scroll:GetWidth()))
             RenderBags(ui)
         end
@@ -695,6 +865,26 @@ ns.RegisterPage(3, {
     end,
     OnShow = function()
         if ns.invDirty then ns:InventoryRefresh() end
+        local ui = ns.invUI
+        if ui and ui.UpdateBar then
+            ui.UpdateBar()
+            C_Timer.After(0, ui.UpdateBar)
+            C_Timer.After(0.3, function()
+                local th = ui.sbar:GetThumbTexture()
+                local function Box(f)
+                    return ("L%.0f R%.0f T%.0f B%.0f"):format(
+                        f:GetLeft() or -1, f:GetRight() or -1,
+                        f:GetTop() or -1, f:GetBottom() or -1)
+                end
+                if th then
+                    ui.barSnap = ("vis=%s effAlpha=%.2f val=%.0f bar[%s] thumb[%s] thumbShown=%s thumbVisible=%s")
+                        :format(
+                            tostring(ui.sbar:IsVisible()), ui.sbar:GetEffectiveAlpha(),
+                            ui.sbar:GetValue(), Box(ui.sbar), Box(th),
+                            tostring(th:IsShown()), tostring(th:IsVisible()))
+                end
+            end)
+        end
     end,
     OnPad = function(f, button)
         local ui = ns.invUI
@@ -730,8 +920,44 @@ ns.RegisterPage(3, {
         local ui = ns.invUI
         if ui and ui.dpadHold then ui.dpadHold[button] = nil end
     end,
+    OnStick = function(f, stick, x, y, dt)
+        local ui = ns.invUI
+        local m = ui and ui.model
+        if not m then return end
+        local name = stick or ""
+        local step = (dt or 0.05) * 0.6
+        if name:find("Left") or name:find("Move") or name == "PADLSTICK" then
+            x, y = StickAxis(x), StickAxis(y)
+            if x ~= 0 then
+                ui.modelYaw = (ui.modelYaw or 0) + x * step * 2
+                if m.SetFacing then m:SetFacing(ui.modelYaw) end
+            end
+            if y ~= 0 then
+                ui.modelPitch = math.max(-1.2, math.min(1.2,
+                    (ui.modelPitch or 0) + y * step * 1.5))
+                pcall(function()
+                    if m.SetPitch then m:SetPitch(ui.modelPitch) end
+                end)
+            end
+        elseif name:find("Right") or name:find("Camera") or name == "PADRSTICK" then
+            y = StickAxis(y)
+            if y ~= 0 then
+                local z = math.max(0.4, math.min(3,
+                    (ui.modelZoom or 1) + y * step))
+                ui.modelZoom = z
+                pcall(function()
+                    if m.SetCamDistanceScale then
+                        m:SetCamDistanceScale(z)
+                    elseif m.SetPosition then
+                        m:SetPosition(0, 0, 1 - z)
+                    end
+                end)
+            end
+        end
+    end,
     OnHide = function()
         local ui = ns.invUI
         if ui and ui.dpadHold then wipe(ui.dpadHold) end
+        if ui then HideItemTip(ui) end
     end,
 })

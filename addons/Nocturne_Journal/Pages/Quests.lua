@@ -255,10 +255,10 @@ ns.RegisterPage(2, {
         -- panel background still runs to the screen edge.
         scroll:SetPoint("BOTTOMRIGHT", -28, 44)
         scroll:EnableMouseWheel(true)
-        local sbar = CreateFrame("Slider", nil, scroll, "UIPanelScrollBarTemplate")
+        local sbar = ns.NewScrollBar(scroll)
         ui.sbar = sbar
-        sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, -16)
-        sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 16)
+        sbar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 8, 0)
+        sbar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 8, 0)
         sbar:SetValueStep(30)
         sbar:SetObeyStepOnDrag(false)
         sbar:SetScript("OnValueChanged", function(_, v) scroll:SetVerticalScroll(v) end)
@@ -268,6 +268,7 @@ ns.RegisterPage(2, {
         scroll:SetScript("OnScrollRangeChanged", function(_, _, yrange)
             sbar:SetMinMaxValues(0, math.max(1, yrange or 0))
             sbar:SetShown((yrange or 0) > 1)
+            ns.FitScrollThumb(sbar, scroll:GetHeight(), yrange)
         end)
         scroll:SetScript("OnVerticalScroll", function(_, off) sbar:SetValue(off) end)
 
