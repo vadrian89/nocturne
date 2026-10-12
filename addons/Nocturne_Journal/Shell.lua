@@ -1015,7 +1015,27 @@ function ns.TipRight(d)
     GameTooltip:SetPoint("TOPLEFT", d, "TOPRIGHT", 8, 0)
 end
 
+-- While a bind/edit dialog is up the raised action bars sit on top of the
+-- page (the inventory stats text bleeds through). A dim layer between the
+-- page content and the bars keeps them readable.
+local seqDim
+local function SeqDim(show)
+    if show and not seqDim then
+        seqDim = CreateFrame("Frame", nil, ns.frame)
+        -- Above the pages/header, below the raised bars (frame+30) and the
+        -- dialog itself.
+        seqDim:SetFrameLevel(ns.frame:GetFrameLevel() + 25)
+        seqDim:SetAllPoints()
+        seqDim.tex = seqDim:CreateTexture(nil, "BACKGROUND")
+        seqDim.tex:SetAllPoints()
+        local c = T.colors.backdrop
+        seqDim.tex:SetColorTexture(c[1], c[2], c[3], 0.85)
+    end
+    if seqDim then seqDim:SetShown(show) end
+end
+
 local function BarsVisible(show)
+    SeqDim(show)
     ns.seqBars = ns.seqBars or {}
     for _, f in ipairs(GamepadBarFrames()) do
         if show and not ns.seqBars[f] then
@@ -1028,7 +1048,8 @@ local function BarsVisible(show)
                 pcall(function()
                     f:Show()
                     f:SetFrameStrata("FULLSCREEN_DIALOG")
-                    f:SetFrameLevel(ns.frame:GetFrameLevel() + 30)
+                    f:SetFrameLevel((ns.seqDlg or ns.header or ns.frame)
+                        :GetFrameLevel())
                 end)
             end
         elseif not show and ns.seqBars[f] then
@@ -1072,7 +1093,7 @@ local function BarVisual(bar, on)
                 end
             end
         end
-        bar:SetFrameLevel(on and 5 or 4)
+        bar:SetFrameLevel(bar:GetParent():GetFrameLevel() + (on and 5 or 4))
         local bg = bar.BackgroundFocus
         if bg then
             if on and (not ab or ab.showHighlight) then
