@@ -312,11 +312,19 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
 - In-game behavior can't be verified locally — give the user a concrete
   test protocol (`/reload`, what to face, what to run, what to paste).
 
+## Plans
+
+- Every plan file lives in `<repository-root>/.devin/plans/` with a
+  descriptive name (e.g. `nocturne-journal-plan.md`) — not the session
+  `plan-<hash>.md` format from the assistant's own plans directory.
+
 ## Git
 
 - Branch `master`, conventional one-line commits + `Generated with Devin`
   footer. Never commit secrets. Do not overwrite user edits in .toc files
   (e.g. version fields) unless asked.
+- Never commit anything without explicit approval — leave changes in the
+  working tree.
 
 ## ConsolePort integration (verified)
 
