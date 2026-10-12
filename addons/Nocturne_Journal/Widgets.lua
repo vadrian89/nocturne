@@ -3,6 +3,17 @@ local _, ns = ...
 local Nocturne = _G.Nocturne
 local T = Nocturne.Theme
 
+-- Enlarged tooltips (Inventory items, Abilities spells); the comparison
+-- tooltips for an equipped counterpart follow the same scale.
+ns.TIP_SCALE = 1.6
+function ns.SetTipScale(scale)
+    GameTooltip:SetScale(scale)
+    for i = 1, 2 do
+        local st = _G["ShoppingTooltip" .. i]
+        if st then st:SetScale(scale) end
+    end
+end
+
 -- Thumb sized like the native ones: proportional to the visible fraction
 -- of the content, floored so it never shrinks to nothing.
 function ns.FitScrollThumb(bar, viewport, range)

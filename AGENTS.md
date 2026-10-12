@@ -140,6 +140,15 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   Troll, Skyborne, Human, Dwarf, Night Elf, Gnome. Other races are untested.
   `{nil, "x"}` stops `ipairs` at once — a nil first candidate once skipped
   every race but Scourge; append candidates instead.
+- Spell cast animations aren't exposed to addons; they live in db2
+  (SpellXSpellVisual → SpellVisualEvent → SpellVisualKitEffect type 6 →
+  SpellVisualAnim). Forever's db2 is its own build (wago.tools product
+  `wow_cn_beta`, 1.60.x) with classic spell IDs and visuals. Proven on
+  Forever: `PlayerModel:SetAnimation` with those IDs plays the right motion,
+  Midnight's IDs play their AnimationData fallback instead;
+  `PlayerModel:HasAnimation` answers false for every ID; `SetSheathed`
+  doesn't exist on `PlayerModel`. Cannibalize 20577 is a server-scripted
+  Dummy that casts aura 20578 (anim 203) — db2 links them only by name.
 - *(Unverified fix.)* The journal's `PlayerModel` is refreshed with
   `RefreshUnit` on `PLAYER_EQUIPMENT_CHANGED` / `UNIT_MODEL_CHANGED`
   (player); without it the model keeps showing the old gear.
@@ -246,6 +255,11 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
     `ns:FitDialog(dialog)` (Journal `Shell.lua`) after every text change;
     it accounts for inline pad-glyph atlases (`|A:...|a`) that
     `GetStringWidth/Height` don't measure (+24w / +10h per glyph).
+- Journal pages may claim a LT/RT release with `def.OnTrigger(pf, dir)`
+  returning true (Abilities turns its book spreads); otherwise it goes to
+  the sub-page switch. Pad bar
+  helpers (`ns.GamepadBarSlot`, `ns.SeqGlyphs`) live in `Shell.lua`, the
+  enlarged tooltip scale (`ns.SetTipScale`) in `Widgets.lua`.
 - Shared helpers go into `_G.Nocturne` (`Print`, `Debug`, `RegisterModule`,
   `RegisterEvent`, `ShowCopyText`, `Theme`) — defined in `Nocturne_Core`.
 - Per-addon state lives in `ns`; SavedVariables defaults in `DB.lua` merged

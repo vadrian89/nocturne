@@ -122,23 +122,20 @@ function ns:DiagText()
     end
     if ns.abUI then
         local ui = ns.abUI
-        add(("abilities: tab=%s items=%d selected=%s"):format(
-            tostring(ui.tab and ui.tab.name),
-            ui.items and #ui.items or -1,
-            tostring(ui.selected and ui.selected.info
-                and ui.selected.info.name)))
-        local function Box(f)
-            if not f then return "-" end
-            return ("L%.0f R%.0f T%.0f B%.0f"):format(
-                f:GetLeft() or -1, f:GetRight() or -1,
-                f:GetTop() or -1, f:GetBottom() or -1)
-        end
-        add(("abBox: left[%s] vis=%s right[%s] list[%s] rows=%d row1[%s]"):format(
-            Box(ui.left), tostring(ui.left and ui.left:IsVisible()),
-            Box(ui.right), Box(ui.list and ui.list.frame),
-            ui.list and #ui.list.rows or -1,
-            Box(ui.list and ui.list.rows[1])))
-        add("abBoxSnapshot(0.3s after show): " .. tostring(ui.boxSnap))
+        local sel = ui.selected
+        local binds = 0
+        for _ in pairs(ui.binds and ui.binds.byID or {}) do binds = binds + 1 end
+        add(("abilities: sections=%d pages=%d spread=%s/%s grid=%sx%s selected=%s spellID=%s gamepadBinds=%d"):format(
+            ui.sections and #ui.sections or -1,
+            ui.pages and #ui.pages or -1,
+            tostring(ui.spread), tostring(ui.spreads),
+            tostring(ui.cols), tostring(ui.rows),
+            tostring(sel and sel.info.name),
+            tostring(sel and sel.info.spellID), binds))
+        local g = ui.side and ui.side[1] and ui.side[1].grid
+        add(("abGrid: L%.0f R%.0f T%.0f B%.0f"):format(
+            g and g:GetLeft() or -1, g and g:GetRight() or -1,
+            g and g:GetTop() or -1, g and g:GetBottom() or -1))
     end
     if ns.invUI then
         local ub = ns.invUI.useBtn

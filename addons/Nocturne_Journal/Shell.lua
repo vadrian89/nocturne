@@ -46,6 +46,61 @@ local function PadGlyph(name, fallback)
 end
 ns.PadGlyph = PadGlyph
 
+-- Render a stored/pressed sequence ("PADLTRIGGER-PAD1") with the active
+-- controller's glyphs.
+function ns.SeqGlyphs(seq)
+    local out = {}
+    for k in seq:gmatch("[^-]+") do
+        out[#out + 1] = PadGlyph(k, k:gsub("^PAD", ""))
+    end
+    return table.concat(out, " + ")
+end
+
+-- Forever's native gamepad bars already turn modifier state + button into a
+-- bar slot: LT selects the left bar, RT the right bar, LT+RT the bottom bar,
+-- none the top bar; the last key picks one of the 8 diamond buttons
+-- (dpad 1-4, face buttons 5-8). Placing the item on that storage slot makes
+-- the captured chord work outside the journal too.
+local BAR_BTN = {
+    PADDLEFT = 1,
+    PADDUP = 2,
+    PADDRIGHT = 3,
+    PADDDOWN = 4,
+    PAD3 = 5,
+    PAD4 = 6,
+    PAD2 = 7,
+    PAD1 = 8,
+}
+
+ns.GamepadBarButtons = BAR_BTN
+
+function ns.GamepadBarSlot(seq)
+    local util = _G.GamepadActionBarBindingUtil
+    local pu = _G.GamepadMainActionBarFrame
+        and _G.GamepadMainActionBarFrame.PageUnit
+    if not (util and pu and pu.GetCurrentPage) then return nil end
+    local parts = {}
+    for k in seq:gmatch("[^-]+") do parts[#parts + 1] = k end
+    local btnIdx = BAR_BTN[parts[#parts]]
+    if not btnIdx then return nil end
+    local lt, rt = false, false
+    for i = 1, #parts - 1 do
+        if parts[i] == "PADLTRIGGER" then
+            lt = true
+        elseif parts[i] == "PADRTRIGGER" then
+            rt = true
+        end
+    end
+    -- Bar index order: top, left(LT), right(RT), bottom(LT+RT).
+    local slotID = ((lt and rt) and 3 or lt and 1 or rt and 2 or 0) * 8
+        + btnIdx
+    if util.IsReservedPageUnitSlotID(slotID) then return nil end
+    local page = pu:GetCurrentPage()
+    if not util.IsStandardGamepadPageNum(page) then page = 1 end
+    return util.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID(
+        page, slotID)
+end
+
 local function SetLabelColor(label, c)
     label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
 end
@@ -522,7 +577,14 @@ function ns:OnPadButtonUp(button)
         ns.trigDown[button] = nil
         if not ns.trigUsed[button] and not ns.padCapture
             and not (ns.modal and ns.modal:IsShown()) then
-            ns:SetSubPage(ns.subCurrent + (button == "PADRTRIGGER" and 1 or -1))
+            -- A page may turn its own leaves instead (Abilities: book
+            -- spreads); OnTrigger returns true when it took the press.
+            local dir = button == "PADRTRIGGER" and 1 or -1
+            local def = ns.pages[ns.current]
+            if not (def and def.OnTrigger
+                and def.OnTrigger(ns.pageFrames[ns.current], dir)) then
+                ns:SetSubPage(ns.subCurrent + dir)
+            end
         end
         return
     end

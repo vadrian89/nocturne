@@ -121,16 +121,10 @@ local function QualityBorder(b, quality)
     b.q:Show()
 end
 
-local TIP_SCALE = 1.6
-
 local function HideItemTip(ui)
     if ui.tipOwner then
         GameTooltip:Hide()
-        GameTooltip:SetScale(1)
-        for i = 1, 2 do
-            local st = _G["ShoppingTooltip" .. i]
-            if st then st:SetScale(1) end
-        end
+        ns.SetTipScale(1)
         ui.tipOwner = nil
     end
 end
@@ -152,12 +146,7 @@ local function ShowItemTip(ui, b)
         return
     end
     ui.tipOwner = b
-    GameTooltip:SetScale(TIP_SCALE)
-    -- Comparison tooltip for the equipped counterpart uses the same scale.
-    for i = 1, 2 do
-        local st = _G["ShoppingTooltip" .. i]
-        if st then st:SetScale(TIP_SCALE) end
-    end
+    ns.SetTipScale(ns.TIP_SCALE)
     GameTooltip:Show()
 end
 
@@ -1148,48 +1137,7 @@ local function SeqBindKey(seq)
     return CanonBindKey(seq)
 end
 
--- Forever's native gamepad bars already turn modifier state + button into a
--- bar slot: LT selects the left bar, RT the right bar, LT+RT the bottom bar,
--- none the top bar; the last key picks one of the 8 diamond buttons
--- (dpad 1-4, face buttons 5-8). Placing the item on that storage slot makes
--- the captured chord work outside the journal too.
-local BAR_BTN = {
-    PADDLEFT = 1,
-    PADDUP = 2,
-    PADDRIGHT = 3,
-    PADDDOWN = 4,
-    PAD3 = 5,
-    PAD4 = 6,
-    PAD2 = 7,
-    PAD1 = 8,
-}
-
-local function GamepadBarSlot(seq)
-    local util = _G.GamepadActionBarBindingUtil
-    local pu = _G.GamepadMainActionBarFrame
-        and _G.GamepadMainActionBarFrame.PageUnit
-    if not (util and pu and pu.GetCurrentPage) then return nil end
-    local parts = {}
-    for k in seq:gmatch("[^-]+") do parts[#parts + 1] = k end
-    local btnIdx = BAR_BTN[parts[#parts]]
-    if not btnIdx then return nil end
-    local lt, rt = false, false
-    for i = 1, #parts - 1 do
-        if parts[i] == "PADLTRIGGER" then
-            lt = true
-        elseif parts[i] == "PADRTRIGGER" then
-            rt = true
-        end
-    end
-    -- Bar index order: top, left(LT), right(RT), bottom(LT+RT).
-    local slotID = ((lt and rt) and 3 or lt and 1 or rt and 2 or 0) * 8
-        + btnIdx
-    if util.IsReservedPageUnitSlotID(slotID) then return nil end
-    local page = pu:GetCurrentPage()
-    if not util.IsStandardGamepadPageNum(page) then page = 1 end
-    return util.GetGamepadStorageSlotIndexFromPageAndPageUnitSlotID(
-        page, slotID)
-end
+local GamepadBarSlot, SeqGlyphs = ns.GamepadBarSlot, ns.SeqGlyphs
 
 local function PlaceOnGamepadBar(seq, itemID)
     local util = _G.GamepadActionBarBindingUtil
@@ -1216,14 +1164,6 @@ local function ClearOnGamepadBar(seq, itemID)
     end
 end
 
--- Render a stored/pressed sequence with the active controller's glyphs.
-local function SeqGlyphs(seq)
-    local out = {}
-    for k in seq:gmatch("[^-]+") do
-        out[#out + 1] = ns.PadGlyph(k, k:gsub("^PAD", ""))
-    end
-    return table.concat(out, " + ")
-end
 
 local function UnbindItem(ui, itemID, name)
     local removed = 0
