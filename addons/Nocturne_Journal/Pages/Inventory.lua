@@ -184,6 +184,20 @@ local function StatNum(fn, ...)
     return tostring(v)
 end
 
+local function SNum(v)
+    if v == nil or ns.IsSecret(v) then return nil end
+    return v
+end
+
+-- Damage numbers carry buff/percent modifiers; the range shown is the
+-- modified one, same as Blizzard's paper doll.
+local function DmgParts(lo, hi, pos, neg, pct)
+    lo, hi = SNum(lo), SNum(hi)
+    if not (lo and hi) then return nil end
+    pos, neg, pct = SNum(pos) or 0, SNum(neg) or 0, SNum(pct) or 1
+    return (lo + pos - neg) * pct, (hi + pos - neg) * pct
+end
+
 -- Stat icons: spell/item art (fileID) or a texture path — both are valid
 -- SetTexture inputs. SpellIDs are classic buffs with on-theme icons.
 local function SpellIcon(id)
@@ -200,8 +214,9 @@ local function ItemIcon(id)
     return t
 end
 
--- { header, statCols index, rows }: column 1 is right of the doll, columns
--- 2..4 are the three bottom slots. Row field 3 is the icon function.
+-- { header, column, rows }: `column` is an index into ui.statCols for the
+-- static groups; the per-weapon groups built on each render store their
+-- column frame directly. Row field 3 is the icon function.
 local STATS = {
     { "General", 1, {
         { "Item Level", function()
@@ -254,22 +269,6 @@ local STATS = {
             return StatPct(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
         end, function() return SpellIcon(740) end },
     } },
-    { "Weapons", 2, { -- column 2 sits under the equipment cells
-        { "Main Hand", function()
-            if not UnitDamage then return nil end
-            local lo, hi = UnitDamage("player")
-            if lo == nil or hi == nil or ns.IsSecret(lo) or ns.IsSecret(hi) then
-                return nil
-            end
-            return ("%.0f - %.0f"):format(lo, hi)
-        end, function() return SpellIcon(78) end },
-        { "Attack Power", function()
-            if not UnitAttackPower then return nil end
-            local base, pos, neg = UnitAttackPower("player")
-            if base == nil or ns.IsSecret(base) then return nil end
-            return tostring(base + (pos or 0) + (neg or 0))
-        end, function() return SpellIcon(19506) end },
-    } },
     { "Defense", 1, {
         { "Defense", function()
             if not UnitDefense then return nil end
@@ -305,6 +304,118 @@ local STATS = {
     } },
 }
 
+-- Weapon stat columns: one per weapon type the character actually has,
+-- rebuilt on every render so a gear swap or a class with no ranged weapon
+-- leaves no stale stats behind. UnitDamage returns main+off hand damage;
+-- UnitRangedDamage leads with the ranged attack speed.
+local WCOL_W, WCOL_GAP = 190, 24
+
+local function WeaponGroups()
+    local groups = {}
+    local mh = {
+        { "Damage", function()
+            if not UnitDamage then return nil end
+            local lo, hi, _, _, pos, neg, pct = UnitDamage("player")
+            local a, b = DmgParts(lo, hi, pos, neg, pct)
+            return a and ("%.0f - %.0f"):format(a, b) or nil
+        end, function() return SpellIcon(78) end },
+        { "Speed", function()
+            if not UnitAttackSpeed then return nil end
+            local s = SNum((UnitAttackSpeed("player")))
+            return s and ("%.2f"):format(s) or nil
+        end, function() return SpellIcon(5171) end },
+        { "DPS", function()
+            if not (UnitDamage and UnitAttackSpeed) then return nil end
+            local lo, hi, _, _, pos, neg, pct = UnitDamage("player")
+            local a, b = DmgParts(lo, hi, pos, neg, pct)
+            local s = SNum((UnitAttackSpeed("player")))
+            if not (a and s and s > 0) then return nil end
+            return ("%.1f"):format((a + b) / 2 / s)
+        end, function() return SpellIcon(12328) end },
+        { "Attack Power", function()
+            if not UnitAttackPower then return nil end
+            local base, pos, neg = UnitAttackPower("player")
+            base = SNum(base)
+            if not base then return nil end
+            return tostring(base + (SNum(pos) or 0) + (SNum(neg) or 0))
+        end, function() return SpellIcon(19506) end },
+    }
+    groups[#groups + 1] = { "Main Hand", nil, mh }
+
+    -- Off Hand: only a real off-hand weapon produces a second attack
+    -- speed or off-hand damage; a shield or a held item does not.
+    local ospd = UnitAttackSpeed
+        and SNum(select(2, UnitAttackSpeed("player")))
+    local _, _, olo, ohi, opos, oneg, opct
+    if UnitDamage then _, _, olo, ohi, opos, oneg, opct = UnitDamage("player") end
+    local _, odmg = DmgParts(olo, ohi, opos, oneg, opct)
+    if (ospd and ospd > 0) or (odmg and odmg > 0) then
+        groups[#groups + 1] = { "Off Hand", nil, {
+            { "Damage", function()
+                if not UnitDamage then return nil end
+                local _, _, lo, hi, pos, neg, pct = UnitDamage("player")
+                local a, b = DmgParts(lo, hi, pos, neg, pct)
+                return a and ("%.0f - %.0f"):format(a, b) or nil
+            end, function() return SpellIcon(674) end },
+            { "Speed", function()
+                if not UnitAttackSpeed then return nil end
+                local s = SNum(select(2, UnitAttackSpeed("player")))
+                return s and ("%.2f"):format(s) or nil
+            end, function() return SpellIcon(5171) end },
+            { "DPS", function()
+                if not (UnitDamage and UnitAttackSpeed) then return nil end
+                local _, _, lo, hi, pos, neg, pct = UnitDamage("player")
+                local a, b = DmgParts(lo, hi, pos, neg, pct)
+                local s = SNum(select(2, UnitAttackSpeed("player")))
+                if not (a and s and s > 0) then return nil end
+                return ("%.1f"):format((a + b) / 2 / s)
+            end, function() return SpellIcon(12328) end },
+        } }
+    end
+
+    -- Ranged: a real ranged weapon in slot 18 (wand, bow, thrown — not a
+    -- relic), or the API still reporting ranged damage.
+    local ranged = false
+    local link = GetInventoryItemLink and GetInventoryItemLink("player", 18)
+    if link and C_Item and C_Item.GetItemInfoInstant then
+        local loc = select(4, C_Item.GetItemInfoInstant(link))
+        ranged = loc == "INVTYPE_RANGED" or loc == "INVTYPE_RANGEDRIGHT"
+            or loc == "INVTYPE_THROWN"
+    end
+    if UnitRangedDamage then
+        ranged = ranged
+            or (SNum(select(3, UnitRangedDamage("player"))) or 0) > 0
+    end
+    if ranged and UnitRangedDamage then
+        groups[#groups + 1] = { "Ranged", nil, {
+            { "Damage", function()
+                local _, lo, hi, pos, neg, pct = UnitRangedDamage("player")
+                local a, b = DmgParts(lo, hi, pos, neg, pct)
+                return a and ("%.0f - %.0f"):format(a, b) or nil
+            end, function() return SpellIcon(75) end },
+            { "Speed", function()
+                local s = SNum((UnitRangedDamage("player")))
+                return s and ("%.2f"):format(s) or nil
+            end, function() return SpellIcon(5171) end },
+            { "DPS", function()
+                local s, lo, hi, pos, neg, pct = UnitRangedDamage("player")
+                s = SNum(s)
+                local a, b = DmgParts(lo, hi, pos, neg, pct)
+                if not (a and s and s > 0) then return nil end
+                return ("%.1f"):format((a + b) / 2 / s)
+            end, function() return SpellIcon(12328) end },
+            { "Attack Power", function()
+                if not UnitRangedAttackPower then return nil end
+                local base, pos, neg = UnitRangedAttackPower("player")
+                base = SNum(base)
+                if not base then return nil end
+                return tostring(base + (SNum(pos) or 0) + (SNum(neg) or 0))
+            end, function() return SpellIcon(19506) end },
+        } }
+    end
+    return groups
+end
+
 local function StatRow(col, j)
     local rows = col.rows
     if not rows then
@@ -331,10 +442,40 @@ end
 
 local function RenderStats(ui)
     local cols = ui.statCols
-    if not cols then return end
+    if not (cols and ui.weaponCols and ui.weaponStats) then return end
+
+    -- One column per weapon group, packed under the doll and centered in
+    -- the span between the gear columns and the right stats column.
+    local wgroups = WeaponGroups()
+    local n = #wgroups
+    local avail = ui.weaponStats:GetWidth()
+    if avail <= 0 then avail = n * WCOL_W + (n - 1) * WCOL_GAP end
+    local cw = n > 0 and math.min(WCOL_W,
+        math.max(80, math.floor((avail - (n - 1) * WCOL_GAP) / n))) or 0
+    local total = n * cw + math.max(0, n - 1) * WCOL_GAP
+    local x = math.max(0, math.floor((avail - total) / 2))
+    local groups = {}
+    for _, g in ipairs(STATS) do groups[#groups + 1] = g end
+    for i, g in ipairs(wgroups) do
+        local c = ui.weaponCols[i]
+        if not c then
+            c = CreateFrame("Frame", nil, ui.weaponStats)
+            ui.weaponCols[i] = c
+        end
+        c:ClearAllPoints()
+        c:SetPoint("TOPLEFT", ui.weaponStats, "TOPLEFT", x, 0)
+        c:SetSize(cw, 10)
+        c:Show()
+        g[2] = c
+        groups[#groups + 1] = g
+        x = x + cw + WCOL_GAP
+    end
+    for i = n + 1, #ui.weaponCols do ui.weaponCols[i]:Hide() end
+
     local used, ys = {}, {}
-    for _, group in ipairs(STATS) do
-        local col = cols[group[2]]
+    for _, group in ipairs(groups) do
+        local col = group[2]
+        if type(col) == "number" then col = cols[col] end
         if col then
             local rows = {}
             for _, s in ipairs(group[3]) do
@@ -395,7 +536,10 @@ local function RenderStats(ui)
             end
         end
     end
-    for _, col in ipairs(cols) do
+    local pools = {}
+    for _, col in ipairs(cols) do pools[#pools + 1] = col end
+    for _, col in ipairs(ui.weaponCols) do pools[#pools + 1] = col end
+    for _, col in ipairs(pools) do
         for j = (used[col] or 0) + 1, #(col.rows or {}) do
             local r = col.rows[j]
             r.bar:Hide()
@@ -1585,11 +1729,15 @@ ns.RegisterPage(3, {
 
         ui.statCols = {}
 
-        -- Weapons stats go under the model, centered on its column.
+        -- Weapon stats: a row of per-weapon columns under the doll, in the
+        -- same span as the model (gear columns .. right stats column).
         local wstats = CreateFrame("Frame", nil, equip)
-        ui.statCols[2] = wstats
-        wstats:SetSize(280, 110)
-        wstats:SetPoint("BOTTOM", equip, "BOTTOM", -35, PAD)
+        ui.weaponStats = wstats
+        ui.weaponCols = {}
+        wstats:SetHeight(130)
+        wstats:SetPoint("BOTTOM", equip, "BOTTOM", 0, PAD)
+        wstats:SetPoint("LEFT", equip, "LEFT", PAD + 2 * EQ_CELL + 56, 0)
+        wstats:SetPoint("RIGHT", equip, "RIGHT", -PAD - STATS_W - 16, 0)
 
         -- Middle column: the character model, between the gear and stats.
         local ok, model = pcall(CreateFrame, "PlayerModel", nil, equip)
@@ -1850,7 +1998,7 @@ ns.RegisterPage(3, {
         if not (ui and ui.model) then return end
         local name = stick or ""
         if not (name:find("Right") or name:find("Camera")
-            or name == "PADRSTICK") then
+                or name == "PADRSTICK") then
             return
         end
         x, y = StickAxis(x), StickAxis(y)
