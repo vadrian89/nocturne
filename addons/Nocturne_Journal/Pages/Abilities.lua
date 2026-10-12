@@ -182,6 +182,33 @@ local function BindingFor(ui, item)
     return seq and ns.SeqGlyphs(seq) or nil
 end
 
+-- Raw bar sequence holding this spell, or nil. byID covers exact ranks;
+-- byName covers another rank of the same spell sitting on a bar slot.
+local function BoundSeq(ui, item)
+    local id = item and item.info.spellID
+    if not id or item.bank ~= BANK_PLAYER or not ui.binds then
+        return nil
+    end
+    return ui.binds.byID[id] or ui.binds.byName[item.info.name]
+end
+
+-- Pad legend in the right page's footer; X flips to Unbind while the
+-- selected spell already sits on a bar slot.
+local function UpdateLegend(ui)
+    if not ui.nav then return end
+    local parts = {}
+    if ui.castBtn then
+        parts[#parts + 1] = ns.PadGlyph("PAD1", "A") .. "  Use"
+    end
+    if _G.GamepadActionBarBindingUtil then
+        parts[#parts + 1] = ns.PadGlyph("PAD3", "X") .. "  "
+            .. (BoundSeq(ui, ui.selected) and "Unbind" or "Bind")
+        parts[#parts + 1] = ns.PadGlyph("PAD4", "Y") .. "  Edit Bars"
+    end
+    parts[#parts + 1] = ui.dpad .. "  Navigate"
+    ui.nav:SetText(table.concat(parts, "      "))
+end
+
 -- Pagination: every section starts on a new page and flows onto as many
 -- pages as it needs; pages pair up into spreads (left, right).
 local function Capacity(ui)
@@ -327,6 +354,44 @@ local function CellOf(ui, item)
     return nil
 end
 
+-- The secure cast button holds the selected spell; in PadBind mode PAD1 is
+-- override-bound to click it, so A casts without the pad press ever
+-- touching insecure code.
+local function EnsureCastBtn(ui)
+    if ui.castBtn then return true end
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local ok, b = pcall(CreateFrame, "Button", "NocturneJournalPadCast",
+        UIParent, "SecureActionButtonTemplate")
+    if not ok or not b then return false end
+    b:SetSize(1, 1)
+    b:SetAlpha(0)
+    b:EnableMouse(false)
+    b:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
+    b:RegisterForClicks("AnyUp")
+    b:SetAttribute("type", "spell")
+    b:SetAttribute("useOnKeyDown", false)
+    ui.castBtn = b
+    return true
+end
+
+local function SpellAttr(item)
+    if not (item and item.bank == BANK_PLAYER and item.info.name)
+        or item.info.itemType == IT.FutureSpell then
+        return nil
+    end
+    local n = item.info.name
+    local sub = item.info.subName
+    if sub and sub ~= "" then n = n .. "(" .. sub .. ")" end
+    return n
+end
+
+local function SyncCastBtn(ui)
+    if not EnsureCastBtn(ui) then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    pcall(ui.castBtn.SetAttribute, ui.castBtn, "spell",
+        SpellAttr(ui.selected))
+end
+
 local function Select(ui, item)
     ui.selected = item
     for s = 1, 2 do
@@ -334,7 +399,9 @@ local function Select(ui, item)
             cell.sel:SetShown(item ~= nil and cell.item == item)
         end
     end
+    SyncCastBtn(ui)
     ShowTip(ui, CellOf(ui, item))
+    UpdateLegend(ui)
 end
 
 local function FirstOnSpread(ui)
@@ -421,6 +488,237 @@ local function MoveSelection(ui, button)
     Select(ui, PageAt(ui, side).items[idx])
 end
 
+-- Clears every native bar slot holding this spell (same sweep the bind
+-- dialog uses to keep one slot per spell).
+local function UnbindSpell(ui, item)
+    local id = item.info.spellID
+    if InCombatLockdown and InCombatLockdown() then return end
+    local name = item.info.name
+    for _, mod in ipairs(GAMEPAD_MODS) do
+        for key in pairs(ns.GamepadBarButtons) do
+            local s = ns.GamepadBarSlot(mod .. key)
+            if s then
+                local t, tid = GetActionInfo(s)
+                if t == "spell" and tid
+                    and (tid == id or SpellName(tid) == name) then
+                    ns.BarClear(s)
+                end
+            end
+        end
+    end
+    BuildBindMap(ui)
+    Render(ui)
+    UpdateLegend(ui)
+end
+
+-- X: bind the selected spell to a pad combination = a bar storage slot.
+-- The spell keeps a single slot: its other bar bindings are cleared.
+local function OpenBindDlg(ui)
+    local it = ui.selected
+    local id = it and it.info.spellID
+    if not (id and it.bank == BANK_PLAYER) then return end
+    if not (_G.GamepadActionBarBindingUtil and ns.GamepadBarSlot) then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then return end
+    ui.seqOpen = true
+    local function Body(seq)
+        local d = ns.seqDlg
+        local g = {}
+        for _, s in ipairs(seq) do
+            g[#g + 1] = ns.PadGlyph(s, s:gsub("^PAD", ""))
+        end
+        d.body:SetText("Press the combination for this spell"
+            .. (#g > 0 and "\n\n" .. table.concat(g, " + ") or ""))
+        ns:FitDialog(d)
+    end
+    ns:OpenSeqBind {
+        title = "Bind to Action Bar",
+        body = "Press the combination for this spell",
+        subject = it.info.name,
+        icon = it.info.iconID,
+        tip = function(d)
+            ns.TipRight(d)
+            local ok = GameTooltip.SetSpellBookItem
+                and pcall(GameTooltip.SetSpellBookItem, GameTooltip,
+                    it.slot, it.bank)
+            if not ok then GameTooltip:SetSpellByID(id) end
+            ns.SetTipScale(ns.TIP_SCALE)
+            GameTooltip:Show()
+        end,
+        onLive = Body,
+        onSeq = function(seq)
+            local slot = ns.BarSeqSlot(seq)
+            if not slot then return "Not a bar combination" end
+            if not ns.BarPlace(slot, function() ns.PickupSpellID(id) end) then
+                return "Could not bind"
+            end
+            for _, mod in ipairs(GAMEPAD_MODS) do
+                for key in pairs(ns.GamepadBarButtons) do
+                    local s = ns.GamepadBarSlot(mod .. key)
+                    if s and s ~= slot then
+                        local t, tid = GetActionInfo(s)
+                        if t == "spell" and tid == id then
+                            ns.BarClear(s)
+                        end
+                    end
+                end
+            end
+            return nil
+        end,
+        onClose = function()
+            ui.seqOpen = nil
+            BuildBindMap(ui)
+            Render(ui)
+            Select(ui, ui.selected)
+        end,
+    }
+end
+
+-- Y: rework the bars — pick the combination holding the action to change,
+-- then the destination; X unbinds the picked action. Stays open until
+-- Back, so several edits can be chained.
+local function OpenEditBars(ui)
+    if not (_G.GamepadActionBarBindingUtil and ns.GamepadBarSlot) then
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then return end
+    ui.seqOpen = true
+    local st = {}
+    local function Tip(slot)
+        local d = ns.seqDlg
+        ns.TipRight(d)
+        local ok = GameTooltip.SetAction
+            and pcall(GameTooltip.SetAction, GameTooltip, slot)
+        if not ok then
+            local t, id = GetActionInfo(slot)
+            if t == "spell" and id then
+                pcall(GameTooltip.SetSpellByID, GameTooltip, id)
+            end
+        end
+        ns.SetTipScale(ns.TIP_SCALE)
+        GameTooltip:Show()
+    end
+    -- Name + icon of the action sitting in a bar storage slot, for the
+    -- subject line the native bind dialog centers in its body.
+    local function SlotSubject(slot)
+        local t, id = GetActionInfo(slot)
+        if t == "spell" and id then
+            return SpellName(id), C_Spell and C_Spell.GetSpellTexture
+                and C_Spell.GetSpellTexture(id) or nil
+        end
+        if t == "item" and id and C_Item then
+            return C_Item.GetItemNameByID
+                and C_Item.GetItemNameByID(id) or nil,
+                C_Item.GetItemIconByID
+                and C_Item.GetItemIconByID(id) or nil
+        end
+        if t == "macro" and id and GetMacroInfo then
+            return GetMacroInfo(id)
+        end
+        return nil, GetActionTexture and GetActionTexture(slot) or nil
+    end
+    local function Subject(name, icon)
+        local d = ns.seqDlg
+        d.subject:SetText(name or "")
+        d.subject:SetShown(name ~= nil)
+        if icon then d.icon:SetTexture(icon) end
+        d.icon:SetShown(icon ~= nil)
+    end
+    -- X only unbinds while a source is picked; hide the hint otherwise.
+    local function Hint()
+        local d = ns.seqDlg
+        d.hint:SetText((st.src
+                and ns.PadGlyph("PAD3", "X") .. "  Unbind      " or "")
+            .. ns.PadGlyph("PAD2", "B") .. "  Cancel")
+    end
+    local function Step1()
+        st.src = nil
+        st.msg = "Press the combination you want to change."
+        local d = ns.seqDlg
+        d.body:SetText(st.msg)
+        d.err:SetText("")
+        Subject(nil)
+        Hint()
+        GameTooltip:Hide()
+        ns.SetTipScale(1)
+        ns:FitDialog(d)
+    end
+    local function PickSrc(slot)
+        st.src = slot
+        st.msg = "Press the destination combination."
+        local d = ns.seqDlg
+        d.body:SetText(st.msg)
+        Subject(SlotSubject(slot))
+        Hint()
+        Tip(slot)
+        ns:FitDialog(d)
+    end
+    -- The page's selected spell becomes the pending source, so pressing Y
+    -- on a bound ability jumps straight to "where should it go". Pressing
+    -- the source combination again drops back to free source selection.
+    local selSeq = BoundSeq(ui, ui.selected)
+    local preSrc = selSeq and ns.GamepadBarSlot(selSeq)
+    if preSrc then
+        st.src = preSrc
+        st.msg = "Press the destination combination."
+    end
+    ns:OpenSeqBind {
+        title = "Edit Action Bars",
+        body = st.msg or "Press the combination you want to change.",
+        subject = preSrc and ui.selected.info.name or nil,
+        icon = preSrc and ui.selected.info.iconID or nil,
+        tip = preSrc and function() Tip(preSrc) end or nil,
+        hint = (preSrc
+                and ns.PadGlyph("PAD3", "X") .. "  Unbind      " or "")
+            .. ns.PadGlyph("PAD2", "B") .. "  Cancel",
+        live = true,
+        onLive = function(seq)
+            local d = ns.seqDlg
+            local g = {}
+            for _, s in ipairs(seq) do
+                g[#g + 1] = ns.PadGlyph(s, s:gsub("^PAD", ""))
+            end
+            d.body:SetText((st.msg
+                    or "Press the combination you want to change.")
+                .. (#g > 0 and "\n\n" .. table.concat(g, " + ") or ""))
+            ns:FitDialog(d)
+        end,
+        onSeq = function(seq)
+            local slot = ns.BarSeqSlot(seq)
+            if not slot then return "Not a bar combination" end
+            if not st.src then
+                if not GetActionInfo(slot) then
+                    return "That combination is empty"
+                end
+                PickSrc(slot)
+            elseif slot == st.src then
+                Step1()
+            else
+                ns.BarMove(st.src, slot)
+                Step1()
+            end
+            return nil
+        end,
+        onButton = function(btn, seqState)
+            -- Bare X while a source is held = unbind it. X with a modifier
+            -- held (seq already non-empty) stays a normal bar button.
+            if btn == "PAD3" and st.src
+                and not (seqState and seqState.seq and seqState.seq[1]) then
+                ns.BarClear(st.src)
+                Step1()
+                return true
+            end
+        end,
+        onClose = function()
+            ui.seqOpen = nil
+            BuildBindMap(ui)
+            Render(ui)
+            Select(ui, ui.selected)
+        end,
+    }
+end
+
 -- Dark paper multiply over the parchment atlases, same as the quests page.
 ns.pageBgTint["abilities-left"] = { 0.35, 0.35, 0.38 }
 ns.pageBgTint["abilities-right"] = { 0.35, 0.35, 0.38 }
@@ -470,8 +768,11 @@ ns.RegisterPage(4, {
             side.grid:SetPoint("TOPLEFT", PAD, -(PAD + HEADER_H + 16))
             side.grid:SetPoint("BOTTOMRIGHT", -PAD, PAD + FOOTER_H + 8)
 
+            -- Page number sits in the corner toward the spine.
             side.num = T.CreateFontString(panel, 15, DIM_COLOR)
-            side.num:SetPoint("BOTTOM", panel, "BOTTOM", 0, PAD)
+            side.num:SetPoint(s == 1 and "BOTTOMRIGHT" or "BOTTOMLEFT",
+                panel, s == 1 and "BOTTOMRIGHT" or "BOTTOMLEFT",
+                s == 1 and -PAD or PAD, PAD)
 
             function side.NewCell()
                 local b = CreateFrame("Button", nil, side.grid)
@@ -527,6 +828,7 @@ ns.RegisterPage(4, {
         -- Pad legend in the right page's footer.
         local nav = T.CreateFontString(right, 15, TEXT)
         nav:SetPoint("BOTTOMRIGHT", -PAD, PAD)
+        ui.nav = nav
         local dpad = ""
         for _, b in ipairs({ "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT" }) do
             local g = ns.PadGlyph(b)
@@ -536,7 +838,9 @@ ns.RegisterPage(4, {
             end
             dpad = dpad .. g
         end
-        nav:SetText(dpad .. "  Navigate")
+        ui.dpad = dpad
+        EnsureCastBtn(ui)
+        UpdateLegend(ui)
 
         left:SetScript("OnSizeChanged", function()
             if f:IsShown() and ui.sections then Relayout(ui) end
@@ -578,6 +882,14 @@ ns.RegisterPage(4, {
         SetSpread(ui, spread)
         return true
     end,
+    PadBind = function()
+        local ui = ns.abUI
+        return ui and ui.castBtn ~= nil and not ui.seqOpen
+    end,
+    PadBindKeys = function(f, owner)
+        SetOverrideBindingClick(owner, true, "PAD1",
+            "NocturneJournalPadCast", "LeftButton")
+    end,
     OnPad = function(f, button)
         local ui = ns.abUI
         if not ui then return end
@@ -585,6 +897,14 @@ ns.RegisterPage(4, {
             or button == "PADDLEFT" or button == "PADDRIGHT" then
             ui.dpadHold[button] = { t = 0, acc = 0 }
             MoveSelection(ui, button)
+        elseif button == "PAD3" then
+            if BoundSeq(ui, ui.selected) then
+                UnbindSpell(ui, ui.selected)
+            else
+                OpenBindDlg(ui)
+            end
+        elseif button == "PAD4" then
+            OpenEditBars(ui)
         end
     end,
     OnPadReset = function()
@@ -599,6 +919,7 @@ ns.RegisterPage(4, {
         local ui = ns.abUI
         if not ui then return end
         if ui.dpadHold then wipe(ui.dpadHold) end
+        if ui.seqOpen then ns:CloseSeqBind() end
         HideTip(ui)
     end,
 })

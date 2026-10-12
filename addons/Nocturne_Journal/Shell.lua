@@ -494,6 +494,7 @@ function ns:Toggle()
 end
 
 function ns:OnShellHide()
+    if ns.seqBind then ns:CloseSeqBind() end
     if ns.modal then
         ns.modal:Hide()
         ns.modal = nil
@@ -542,12 +543,26 @@ function ns:FitDialog(d)
     local bodyH = content and content:GetHeight() or DlgTextH(d.body)
     local bodyW = content and content:GetWidth() or DlgTextW(d.body)
     local h = 16 + DlgTextH(d.title) + 16 + bodyH
-    if d.err and DlgTextH(d.err) > 0 then
-        h = h + 8 + DlgTextH(d.err)
+    local below = d.body
+    if d.subject and d.subject:IsShown() then
+        h = h + 12 + DlgTextH(d.subject)
+        below = d.subject
+        if d.icon and d.icon:IsShown() then
+            h = h + 4 + d.icon:GetHeight()
+            below = d.icon
+        end
+    end
+    if d.err then
+        d.err:ClearAllPoints()
+        d.err:SetPoint("TOP", below, "BOTTOM", 0, -8)
+        if DlgTextH(d.err) > 0 then
+            h = h + 8 + DlgTextH(d.err)
+        end
     end
     h = h + 16 + math.max(DlgTextH(d.hint), 8) + 16
     d:SetHeight(math.max(80, h))
     local w = math.max(DlgTextW(d.title), bodyW,
+        d.subject and d.subject:IsShown() and DlgTextW(d.subject) or 0,
         d.err and DlgTextW(d.err) or 0, DlgTextW(d.hint)) + 32
     d:SetWidth(math.max(200, math.min(w, 640)))
 end
@@ -575,14 +590,20 @@ function ns:OnPadButtonUp(button)
     if ns.padHeldKeys then ns.padHeldKeys[button] = nil end
     if ns.trigDown[button] then
         ns.trigDown[button] = nil
-        if not ns.trigUsed[button] and not ns.padCapture
+        -- A trigger pressed before the dialog opened still owes the
+        -- capture its release — otherwise st.held keeps it forever.
+        if ns.padCapture then
+            ns.padCapture(button, false)
+            return
+        end
+        if not ns.trigUsed[button]
             and not (ns.modal and ns.modal:IsShown()) then
             -- A page may turn its own leaves instead (Abilities: book
             -- spreads); OnTrigger returns true when it took the press.
             local dir = button == "PADRTRIGGER" and 1 or -1
             local def = ns.pages[ns.current]
             if not (def and def.OnTrigger
-                and def.OnTrigger(ns.pageFrames[ns.current], dir)) then
+                    and def.OnTrigger(ns.pageFrames[ns.current], dir)) then
                 ns:SetSubPage(ns.subCurrent + dir)
             end
         end
@@ -615,8 +636,9 @@ end
 -- feeds the same OnPadButton/OnPadButtonUp handlers. Frames keep the pad
 -- sticks either way.
 local PAD_KEYS = {
-    "PAD1", "PAD2", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT", "PADDRIGHT",
-    "PADLSHOULDER", "PADRSHOULDER", "PADLTRIGGER", "PADRTRIGGER", "PADBACK",
+    "PAD1", "PAD2", "PAD3", "PAD4", "PADDUP", "PADDDOWN", "PADDLEFT",
+    "PADDRIGHT", "PADLSHOULDER", "PADRSHOULDER", "PADLTRIGGER",
+    "PADRTRIGGER", "PADBACK",
 }
 -- Stick clicks (L3/R3) carry client bindings (ping etc.), so they never
 -- reach OnGamePadButtonDown. They are override-bound for the whole time the
@@ -679,11 +701,18 @@ function ns:UpdatePadMode()
     ClearOverrideBindings(padOwner)
     if def and def.OnPadReset then def.OnPadReset(ns.pageFrames[ns.current]) end
     if want then
-        SetOverrideBindingClick(padOwner, true, "PAD3",
-            "NocturneJournalPadUse", "LeftButton")
         for _, key in ipairs(PAD_KEYS) do
             SetOverrideBindingClick(padOwner, true, key,
                 "NocturneJournalPad_" .. key, "LeftButton")
+        end
+        -- A page may claim keys for its own secure buttons (Abilities:
+        -- PAD1 casts the selected spell); the default claims PAD3 for the
+        -- inventory item-use button.
+        if def.PadBindKeys then
+            def.PadBindKeys(ns.pageFrames[ns.current], padOwner)
+        else
+            SetOverrideBindingClick(padOwner, true, "PAD3",
+                "NocturneJournalPadUse", "LeftButton")
         end
     end
 end
@@ -801,4 +830,330 @@ function ns:OnPadButton(button)
         local def = ns.pages[ns.current]
         if def and def.OnPad then def.OnPad(ns.pageFrames[ns.current], button) end
     end
+end
+
+-- A pressed sequence maps to a native gamepad-bar storage slot when the
+-- last key is a bar button and the modifiers are LT/RT only. Modifier
+-- order doesn't matter: GamepadBarSlot reads them as flags.
+function ns.BarSeqSlot(seq)
+    if not BAR_BTN[seq[#seq]] then return nil end
+    for i = 1, #seq - 1 do
+        if seq[i] ~= "PADLTRIGGER" and seq[i] ~= "PADRTRIGGER" then
+            return nil
+        end
+    end
+    return ns.GamepadBarSlot(table.concat(seq, "-"))
+end
+
+function ns.PickupSpellID(id)
+    if C_Spell and C_Spell.PickupSpell then
+        C_Spell.PickupSpell(id)
+    elseif PickupSpellByID then
+        PickupSpellByID(id)
+    elseif PickupSpell then
+        PickupSpell(id)
+    end
+end
+
+-- Put whatever `pickup` leaves on the cursor into the bar storage slot.
+function ns.BarPlace(slot, pickup)
+    if InCombatLockdown() then return false end
+    local util = _G.GamepadActionBarBindingUtil
+    if util and util.AssignActionToGamepadStandardSlot then
+        local ok = pcall(util.AssignActionToGamepadStandardSlot, slot, pickup)
+        if ClearCursor then ClearCursor() end
+        return ok
+    end
+    if not PlaceAction then return false end
+    local ok = pcall(function()
+        pickup()
+        if GetCursorInfo and GetCursorInfo() then PlaceAction(slot) end
+        if ClearCursor then ClearCursor() end
+    end)
+    return ok
+end
+
+-- Swap the contents of two bar storage slots (or move into an empty one):
+-- PlaceAction leaves the displaced action on the cursor, so a second
+-- PlaceAction drops it back on the source slot.
+function ns.BarMove(src, dst)
+    if InCombatLockdown() or not (PickupAction and PlaceAction) then
+        return false
+    end
+    return pcall(function()
+        PickupAction(src)
+        if not (GetCursorInfo and GetCursorInfo()) then return end
+        PlaceAction(dst)
+        if GetCursorInfo() then PlaceAction(src) end
+        if ClearCursor then ClearCursor() end
+    end)
+end
+
+function ns.BarClear(slot)
+    if InCombatLockdown() then return false end
+    local util = _G.GamepadActionBarBindingUtil
+    if util and util.ClearActionFromGamepadSlot then
+        return pcall(util.ClearActionFromGamepadSlot, slot)
+    end
+    if not PickupAction then return false end
+    return pcall(function()
+        PickupAction(slot)
+        if ClearCursor then ClearCursor() end
+    end)
+end
+
+-- Shared combination-capture dialog (Abilities: bind a spell / edit the
+-- action bars; Inventory: bind a usable item). The caller drives the state
+-- machine: onSeq gets the ordered key list and returns an error string to
+-- show or nil to accept; onButton runs on each down first and may eat the
+-- press (returns true). The dialog sits left of center so a tooltip can
+-- anchor to its right edge, like the native bind UI.
+local seqDlg
+local function EnsureSeqDlg()
+    if seqDlg then return seqDlg end
+    local d = CreateFrame("Frame", "NocturneJournalSeqBind", ns.frame)
+    seqDlg = d
+    ns.seqDlg = d
+    d:SetPoint("CENTER", 0, 0)
+    d:SetSize(430, 170)
+    d:SetFrameLevel(ns.header:GetFrameLevel() + 50)
+    d:EnableMouse(true)
+    T.ApplyBackdrop(d)
+    d.title = T.CreateFontString(d, 17, T.colors.accent)
+    d.title:SetPoint("TOP", 0, -16)
+    d.body = T.CreateFontString(d, 15, T.colors.text)
+    d.body:SetPoint("TOP", d.title, "BOTTOM", 0, -16)
+    d.subject = T.CreateFontString(d, 17, T.colors.accent)
+    d.subject:SetPoint("TOP", d.body, "BOTTOM", 0, -12)
+    d.icon = d:CreateTexture(nil, "ARTWORK")
+    d.icon:SetSize(30, 30)
+    d.icon:SetTexCoord(0.0625, 0.9375, 0.0625, 0.9375)
+    d.icon:SetPoint("TOP", d.subject, "BOTTOM", 0, -4)
+    d.hint = T.CreateFontString(d, 13, T.colors.textDim)
+    d.hint:SetPoint("BOTTOMRIGHT", -16, 16)
+    d.hint:SetJustifyH("RIGHT")
+    d.err = T.CreateFontString(d, 14, { 0.92, 0.30, 0.25, 1 })
+    d.err:SetPoint("TOP", d.body, "BOTTOM", 0, -8)
+    d:Hide()
+    return d
+end
+
+-- The native gamepad bars sit under the journal's fullscreen layer; while
+-- a bind/edit dialog is open they are raised above it so the slots being
+-- edited are visible. Prior visibility and layering are restored on close.
+-- Only GamepadMainActionBarFrame is touched: it parents every bar cluster
+-- (PageUnit + possess/stance/targeting bars). GamepadActionBarEditFrame is
+-- deliberately left alone -- its OnShow activates input binding groups and
+-- its OnHide writes PageUnit fields; both reach forbidden APIs or taint
+-- the secure click path when driven from addon code.
+local function GamepadBarFrames()
+    local f = _G.GamepadMainActionBarFrame
+    if f then return { f } end
+    return {}
+end
+
+-- Tooltip flush right of the dialog, top edges aligned (native bind UI
+-- look). ANCHOR_NONE, not ANCHOR_RIGHT: that preset vertically CENTERS the
+-- tooltip on the owner and is re-applied by the engine on Show/resize —
+-- a scaled-up tooltip taller than the dialog ends up floating above it.
+function ns.TipRight(d)
+    GameTooltip:SetOwner(d, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    GameTooltip:SetPoint("TOPLEFT", d, "TOPRIGHT", 8, 0)
+end
+
+local function BarsVisible(show)
+    ns.seqBars = ns.seqBars or {}
+    for _, f in ipairs(GamepadBarFrames()) do
+        if show and not ns.seqBars[f] then
+            local ok, s = pcall(function()
+                return { f:IsShown(), f:GetFrameStrata(),
+                    f:GetFrameLevel() }
+            end)
+            if ok then
+                ns.seqBars[f] = s
+                pcall(function()
+                    f:Show()
+                    f:SetFrameStrata("FULLSCREEN_DIALOG")
+                    f:SetFrameLevel(ns.frame:GetFrameLevel() + 30)
+                end)
+            end
+        elseif not show and ns.seqBars[f] then
+            local s = ns.seqBars[f]
+            ns.seqBars[f] = nil
+            pcall(function()
+                f:SetFrameStrata(s[2])
+                f:SetFrameLevel(s[3])
+                if not s[1] then f:Hide() end
+            end)
+        end
+    end
+end
+
+-- Modifier highlight driven from our own held state (LT -> left bar, RT ->
+-- right, both -> bottom, none -> top; same mapping as GamepadBarSlot).
+-- The native mixins are off-limits: SetActiveActionBar writes
+-- PageUnit.activeBar and Show/HideHighlight write actionBarScaledUp -- Lua
+-- fields on secure-path objects. Addon-tainted values read by
+-- PressActionButton -> actionButton:Click -> UseAction turn the next real
+-- bar press into ADDON_ACTION_FORBIDDEN. So the visuals are replicated
+-- with engine calls only (child show/hide, frame level): native values are
+-- read, never written. HIGHLIGHT_*_FRAME_LEVEL are file-local in
+-- ActionBar.lua: 5 active, 4 inactive.
+local BAR_KEYS = { "topBar", "leftBar", "rightBar", "bottomBar" }
+
+local function BarVisual(bar, on)
+    pcall(function()
+        local ab = bar.pagingUnitOwner and bar.pagingUnitOwner:GetParent()
+        local icons = on and ab and ab.showButtonIcons and ab.shouldExpand
+        local n = _G.Constants
+            and _G.Constants.GamepadActionBarConstants
+            and _G.Constants.GamepadActionBarConstants
+            .NUM_SLOTS_PER_GAMEPAD_ACTION_BAR_GROUP or 4
+        for i = 1, n do
+            local nm = "ActionButton" .. i
+            for _, g in ipairs({ bar.Left, bar.Right }) do
+                local ic = g and g[nm] and g[nm].ButtonIcon
+                if ic then
+                    if icons then ic:Show() else ic:Hide() end
+                end
+            end
+        end
+        bar:SetFrameLevel(on and 5 or 4)
+        local bg = bar.BackgroundFocus
+        if bg then
+            if on and (not ab or ab.showHighlight) then
+                bg:Show()
+            else
+                bg:Hide()
+            end
+        end
+        local lbf, rbf = bar.LeftButtonFrame, bar.RightButtonFrame
+        if lbf then lbf:Hide() end
+        if rbf then rbf:Hide() end
+    end)
+end
+
+-- Held state comes from IsKeyDown (physical state, the same source the
+-- native GamepadMode modifier checks use) — event-held tables can desync
+-- when an up-event is eaten, and the polled padHeld misreports triggers
+-- on Forever (LT alone reads as LT+RT).
+local function ModHeld(name)
+    if IsKeyDown and IsKeyDown(name) then return true end
+    if ns.seqBind and ns.seqBind.held[name] then return true end
+    return ns.padHeldKeys and ns.padHeldKeys[name] or false
+end
+
+local function SyncBarMods()
+    local pu = _G.GamepadMainActionBarFrame
+        and _G.GamepadMainActionBarFrame.PageUnit
+    local bars = pu and pu.actionBars
+    if not bars then return end
+    local lt = ModHeld("PADLTRIGGER")
+    local rt = ModHeld("PADRTRIGGER")
+    local active = (lt and rt and bars.bottomBar) or (lt and bars.leftBar)
+        or (rt and bars.rightBar) or bars.topBar
+    local compact = pu.ShouldUseCompactLayout
+        and pu:ShouldUseCompactLayout()
+    for _, key in ipairs(BAR_KEYS) do
+        local bar = bars[key]
+        if bar then
+            if compact then pcall(bar.SetShown, bar, bar == active) end
+            BarVisual(bar, bar == active)
+        end
+    end
+end
+
+-- opts: title/body/hint text; tip(owner) anchors a tooltip to the dialog;
+-- live keeps capturing after each resolved sequence; onLive(seq) previews
+-- the pressed keys; onSeq/onButton/onClose drive the caller's state.
+function ns:OpenSeqBind(opts)
+    local d = EnsureSeqDlg()
+    local st = { seq = {}, held = {}, opts = opts }
+    ns.seqBind = st
+    d.title:SetText(opts.title or "")
+    d.body:SetText(opts.body or "")
+    d.err:SetText("")
+    d.subject:SetText(opts.subject or "")
+    d.subject:SetShown(opts.subject ~= nil)
+    if opts.icon then d.icon:SetTexture(opts.icon) end
+    d.icon:SetShown(opts.icon ~= nil)
+    d.hint:SetText(opts.hint or
+        (PadGlyph("PAD2", "B") .. "  " .. (CANCEL or "Cancel")))
+    ns:FitDialog(d)
+    d:Show()
+    BarsVisible(true)
+    SyncBarMods()
+    if opts.tip then opts.tip(d) end
+    ns.padCapture = function(btn, down)
+        local o = ns.seqBind and ns.seqBind.opts
+        if not o then
+            ns.padCapture = nil
+            return
+        end
+        C_Timer.After(0, SyncBarMods)
+        if down then
+            -- Modifiers already held when the chord starts (e.g. held while
+            -- the dialog opened) produce no down event — fold them into the
+            -- sequence so "held LT + press X" resolves to the LT bar.
+            if BAR_BTN[btn] and #st.seq == 0 then
+                for _, m in ipairs({ "PADLTRIGGER", "PADRTRIGGER" }) do
+                    if ModHeld(m) then
+                        st.held[m] = true
+                        st.seq[#st.seq + 1] = m
+                    end
+                end
+            end
+            if o.onButton and o.onButton(btn, st) then return end
+            -- B cancels like the native bind UI — but only as the first
+            -- key, so LT/RT + B stays a valid bar combination.
+            if btn == "PADBACK" or (btn == "PAD2" and #st.seq == 0) then
+                st.cancel = true
+                return
+            end
+            if btn == "PADLTRIGGER" or btn == "PADRTRIGGER" or BAR_BTN[btn] then
+                st.held[btn] = true
+                if #st.seq < 3 then st.seq[#st.seq + 1] = btn end
+                if o.onLive then o.onLive(st.seq) end
+            end
+            return
+        end
+        st.held[btn] = nil
+        local seq = st.seq
+        if st.cancel then
+            if next(st.held) then return end
+            st.cancel = nil
+            ns:CloseSeqBind()
+            return
+        end
+        -- A chord completes when its last-pressed key is released, or when
+        -- nothing is held anymore; a leftover modifier tail is dropped.
+        local last = seq[#seq]
+        local complete = (btn == last and BAR_BTN[btn])
+            or not next(st.held)
+        if not complete then return end
+        st.seq = {}
+        if not last or last == "PADLTRIGGER" or last == "PADRTRIGGER" then
+            return
+        end
+        local err = o.onSeq and o.onSeq(seq)
+        d.err:SetText(err or "")
+        ns:FitDialog(d)
+        if err then return end
+        if not o.live then ns:CloseSeqBind() end
+    end
+    ns:UpdatePadMode()
+end
+
+function ns:CloseSeqBind()
+    local st = ns.seqBind
+    ns.seqBind = nil
+    ns.padCapture = nil
+    GameTooltip:Hide()
+    if ns.SetTipScale then ns.SetTipScale(1) end
+    BarsVisible(false)
+    SyncBarMods()
+    if seqDlg then seqDlg:Hide() end
+    if st and st.opts.onClose then st.opts.onClose() end
+    ns:UpdatePadMode()
 end

@@ -1335,72 +1335,65 @@ local function OpenBindDlg(ui)
     if not (ns.chardb and ns.chardb.binds) then return end
     local name = info.itemName
         or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
-    ui.bindCap = { seq = {}, held = {}, itemID = info.itemID }
-    OpenDlg(ui, "Bind " .. name,
-        ns.PadGlyph("PAD2", "B") .. "  Cancel")
-    local function Body()
+    local itemID = info.itemID
+    local function Body(extra)
+        local d = ns.seqDlg
         local lines = {}
-        local cur = BindsForItem(ui.bindCap.itemID)
+        local cur = BindsForItem(itemID)
         if cur then
             local g = {}
             for _, s in ipairs(cur) do g[#g + 1] = SeqGlyphs(s) end
             lines[#lines + 1] = "current: " .. table.concat(g, "   ")
         end
-        if #ui.bindCap.seq > 0 then
+        lines[#lines + 1] = extra or "Hold LT/RT + key to bind"
+        d.body:SetText(table.concat(lines, "\n"))
+        ns:FitDialog(d)
+    end
+    ui.dlgOpen = true
+    ns:OpenSeqBind {
+        title = "Bind " .. name,
+        tip = function(d)
+            ns.TipRight(d)
+            if info.hyperlink then
+                GameTooltip:SetHyperlink(info.hyperlink)
+            else
+                pcall(GameTooltip.SetItemByID, GameTooltip, itemID)
+            end
+            ns.SetTipScale(ns.TIP_SCALE)
+            GameTooltip:Show()
+        end,
+        onLive = function(seq)
             local g = {}
-            for _, s in ipairs(ui.bindCap.seq) do
+            for _, s in ipairs(seq) do
                 g[#g + 1] = ns.PadGlyph(s, s:gsub("^PAD", ""))
             end
-            lines[#lines + 1] = table.concat(g, " + ")
-        else
-            lines[#lines + 1] = "Hold LT/RT + key to bind"
-        end
-        ui.dlg.body:SetText(table.concat(lines, "\n"))
-        FitDlg(ui.dlg)
-    end
-    Body()
-    ns.padCapture = function(btn, down)
-        local cap = ui.bindCap
-        if not cap then return end
-        if down then
-            cap.held[btn] = true
-            if #cap.seq < 3 then cap.seq[#cap.seq + 1] = btn end
-            ui.dlg.err:SetText("")
-            Body()
-            return
-        end
-        cap.held[btn] = nil
-        if next(cap.held) or #cap.seq == 0 then return end
-        if #cap.seq == 1 and cap.seq[1] == "PAD2" then
-            CloseDlg(ui)
-            return
-        end
-        local key, err = SeqBindKey(cap.seq)
-        if not key then
-            ui.dlg.err:SetText("Invalid: " .. err)
-            cap.seq = {}
-            Body()
-            return
-        end
-        -- One bind per item: drop the item's previous seqs (and their
-        -- bar slots) before storing the new one.
-        for seq, id in pairs(ns.chardb.binds) do
-            if id == cap.itemID and seq ~= key then
-                ns.chardb.binds[seq] = nil
-                ClearOnGamepadBar(seq, id)
+            Body(table.concat(g, " + "))
+        end,
+        onSeq = function(seq)
+            local key, err = SeqBindKey(seq)
+            if not key then return "Invalid: " .. err end
+            -- One bind per item: drop the item's previous seqs (and their
+            -- bar slots) before storing the new one.
+            for s, id in pairs(ns.chardb.binds) do
+                if id == itemID and s ~= key then
+                    ns.chardb.binds[s] = nil
+                    ClearOnGamepadBar(s, id)
+                end
             end
-        end
-        ns.chardb.binds[key] = cap.itemID
-        CloseDlg(ui)
-        ns:ReapplyItemBinds()
-        RenderBags(ui)
-        if PlaceOnGamepadBar(key, cap.itemID) then
-            Nocturne.Print(("Bound %s to %s (also on action bar).")
-                :format(name, key))
-        else
-            Nocturne.Print(("Bound %s to %s."):format(name, key))
-        end
-    end
+            ns.chardb.binds[key] = itemID
+            ns:ReapplyItemBinds()
+            RenderBags(ui)
+            if PlaceOnGamepadBar(key, itemID) then
+                Nocturne.Print(("Bound %s to %s (also on action bar).")
+                    :format(name, key))
+            else
+                Nocturne.Print(("Bound %s to %s."):format(name, key))
+            end
+            return nil
+        end,
+        onClose = function() ui.dlgOpen = nil end,
+    }
+    Body()
 end
 
 local function ConfirmUnbind(ui)

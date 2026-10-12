@@ -235,6 +235,28 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   bar button got `SpellStopCasting`/`SpellStopTargeting`/`ClearTarget`
   blocked). `LearnedPOIs.lua` attaches no provider on Forever.
   *(Unverified fix.)*
+- Gamepad action bars: never `Show()`/`Hide()` `GamepadActionBarEditFrame`
+  — its OnShow calls `ActivateBindingGroup` → `AddBindingSet` →
+  `UpdateInteractIcons` → `SetPreferredGamepadInteractTarget` FORBIDDEN,
+  and aborting mid-OnShow leaves its `inputBlockers` binding set active
+  (eats pad input until /reload). Never call PageUnit mixin methods from
+  addon code either: `SetActiveActionBar`/`ActionBarModKeyDownStateCheck`
+  write `PageUnit.activeBar`, a Lua field later read by
+  `PressActionButton` → `actionButton:Click()` → `UseAction` — the
+  addon-tainted value makes the next real bar press ADDON_ACTION_FORBIDDEN.
+  Journal's bind/edit dialogs raise only `GamepadMainActionBarFrame` and
+  replicate the modifier highlight with engine calls on children
+  (`BackgroundFocus`, `ButtonIcon`, frame level — native
+  `HIGHLIGHT_*_FRAME_LEVEL` are 5/4). The main PageUnit permanently listens
+  for `CrossBarModifierStateChanged`, so a native LT/RT press rewrites
+  `activeBar` cleanly — a tainted field self-heals on the next modifier
+  press after the journal closes.
+- For "is pad key X held" use `IsKeyDown("PADLTRIGGER")` — physical state,
+  the same source `GamepadMode.IsBindingDown` uses. Forever's
+  `GetDeviceMappedState().buttons` misreports triggers (LT alone can read
+  as LT+RT), and event-held tables desync when an up-event is eaten (e.g.
+  `OnPadButtonUp`'s trigDown branch must forward trigger releases to an
+  active padCapture or its `held` set jams).
 
 ## Conventions
 
@@ -260,6 +282,14 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   the sub-page switch. Pad bar
   helpers (`ns.GamepadBarSlot`, `ns.SeqGlyphs`) live in `Shell.lua`, the
   enlarged tooltip scale (`ns.SetTipScale`) in `Widgets.lua`.
+- In PadBind mode every key is forwarded to `OnPadButton`; a page claims
+  keys for its own secure buttons via `def.PadBindKeys(pf, owner)`
+  (Abilities: PAD1 casts the selected spell through
+  `NocturneJournalPadCast`; the fallback binds PAD3 to the inventory use
+  button). The combination-capture dialog `ns:OpenSeqBind(opts)` and the
+  bar helpers (`ns.BarSeqSlot`, `ns.BarPlace`, `ns.BarMove`, `ns.BarClear`,
+  `ns.PickupSpellID`) live in `Shell.lua` — shared by the Abilities bind
+  (X) and edit-bars (Y) dialogs and the Inventory item bind.
 - Shared helpers go into `_G.Nocturne` (`Print`, `Debug`, `RegisterModule`,
   `RegisterEvent`, `ShowCopyText`, `Theme`) — defined in `Nocturne_Core`.
 - Per-addon state lives in `ns`; SavedVariables defaults in `DB.lua` merged
