@@ -758,8 +758,11 @@ function ns:UpdatePadMode()
     local want = ns.frame:IsShown() and def and def.PadBind
         and not (ns.modal and ns.modal:IsShown())
         and def.PadBind(ns.pageFrames[ns.current]) and true or false
-    if want == (ns.padBind or false) then return end
+    if want == (ns.padBind or false) and (not want or ns.padBindDef == def) then
+        return
+    end
     ns.padBind = want
+    ns.padBindDef = want and def or nil
     ns.frame:EnableGamePadButton(not want)
     ClearOverrideBindings(padOwner)
     if def and def.OnPadReset then def.OnPadReset(ns.pageFrames[ns.current]) end
