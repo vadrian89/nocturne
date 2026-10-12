@@ -542,10 +542,23 @@ function ns:FitDialog(d)
     local content = d.content and d.content:IsShown() and d.content
     local bodyH = content and content:GetHeight() or DlgTextH(d.body)
     local bodyW = content and content:GetWidth() or DlgTextW(d.body)
-    local h = 16 + DlgTextH(d.title) + 16 + bodyH
+    if d.titleBox then
+        d.titleBox:SetSize(math.max(80, DlgTextW(d.title) + 32),
+            math.max(30, DlgTextH(d.title) + 32))
+    end
+    -- Plaque dialogs: content padded 48px on every side
+    -- from the frame edges, hints float outside. Others: 16px padding,
+    -- in-frame title and hints.
+    local pad = d.titleBox and 48 or 16
+    local padY = d.titleBox and 48 or 16
+    if d.titleBox then
+        d.body:ClearAllPoints()
+        d.body:SetPoint("TOP", d, "TOP", 0, -padY)
+    end
+    local h = (d.titleBox and padY or 16 + DlgTextH(d.title) + 16) + bodyH
     local below = d.body
     if d.subject and d.subject:IsShown() then
-        h = h + 12 + DlgTextH(d.subject)
+        h = h + 14 + DlgTextH(d.subject)
         below = d.subject
         if d.icon and d.icon:IsShown() then
             h = h + 4 + d.icon:GetHeight()
@@ -559,11 +572,15 @@ function ns:FitDialog(d)
             h = h + 8 + DlgTextH(d.err)
         end
     end
-    h = h + 16 + math.max(DlgTextH(d.hint), 8) + 16
+    h = h + padY
+    if not d.hintFloating then
+        h = h + math.max(DlgTextH(d.hint), 8) + padY
+    end
     d:SetHeight(math.max(80, h))
     local w = math.max(DlgTextW(d.title), bodyW,
         d.subject and d.subject:IsShown() and DlgTextW(d.subject) or 0,
-        d.err and DlgTextW(d.err) or 0, DlgTextW(d.hint)) + 32
+        d.err and DlgTextW(d.err) or 0,
+        d.hintFloating and 0 or DlgTextW(d.hint)) + pad * 2
     d:SetWidth(math.max(200, math.min(w, 640)))
 end
 
@@ -906,9 +923,27 @@ end
 -- action bars; Inventory: bind a usable item). The caller drives the state
 -- machine: onSeq gets the ordered key list and returns an error string to
 -- show or nil to accept; onButton runs on each down first and may eat the
--- press (returns true). The dialog sits left of center so a tooltip can
--- anchor to its right edge, like the native bind UI.
+-- press (returns true). Centered like the native bind UI: title plaque on
+-- the top edge, action name+icon centered in the body, input hints in a
+-- bar below, action tooltip anchored flush right (ns.TipRight).
 local seqDlg
+
+-- Dark translucent nine-slice border (the Edit Mode dialogs' look); the
+-- tooltip backdrop is the fallback when a template is absent.
+local function DlgSkin(f, tpl)
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background" })
+        f:SetBackdropColor(0.07, 0.07, 0.10, 0.94)
+    end
+    local ok, border = pcall(CreateFrame, "Frame", nil, f, tpl)
+    if ok and border then
+        border:SetAllPoints(f)
+        return
+    end
+    T.ApplyBackdrop(f)
+end
+
 local function EnsureSeqDlg()
     if seqDlg then return seqDlg end
     local d = CreateFrame("Frame", "NocturneJournalSeqBind", ns.frame)
@@ -918,21 +953,32 @@ local function EnsureSeqDlg()
     d:SetSize(430, 170)
     d:SetFrameLevel(ns.header:GetFrameLevel() + 50)
     d:EnableMouse(true)
-    T.ApplyBackdrop(d)
-    d.title = T.CreateFontString(d, 17, T.colors.accent)
-    d.title:SetPoint("TOP", 0, -16)
-    d.body = T.CreateFontString(d, 15, T.colors.text)
-    d.body:SetPoint("TOP", d.title, "BOTTOM", 0, -16)
-    d.subject = T.CreateFontString(d, 17, T.colors.accent)
-    d.subject:SetPoint("TOP", d.body, "BOTTOM", 0, -12)
+    DlgSkin(d, "DialogBorderTranslucentTemplate")
+    -- Title plaque straddling the top edge, like the native bind dialog.
+    local tb = CreateFrame("Frame", nil, d)
+    d.titleBox = tb
+    tb:SetFrameLevel(d:GetFrameLevel() + 2)
+    -- The border art's top bar sits ~7px inside the frame edge (native
+    -- TitleBox is anchored CENTER/TOP y=-7): that is the plaque's midline.
+    tb:SetPoint("CENTER", d, "TOP", 0, -7)
+    tb:SetSize(160, 40)
+    DlgSkin(tb, "DialogBorderDarkTemplate")
+    d.title = T.CreateFontString(tb, 20, T.colors.accent)
+    d.title:SetPoint("CENTER", tb)
+    d.body = T.CreateFontString(d, 17, T.colors.text)
+    d.body:SetPoint("TOP", tb, "BOTTOM", 0, -14)
+    d.subject = T.CreateFontString(d, 20, T.colors.accent)
+    d.subject:SetPoint("TOP", d.body, "BOTTOM", 0, -14)
     d.icon = d:CreateTexture(nil, "ARTWORK")
-    d.icon:SetSize(30, 30)
+    d.icon:SetSize(35, 35)
     d.icon:SetTexCoord(0.0625, 0.9375, 0.0625, 0.9375)
     d.icon:SetPoint("TOP", d.subject, "BOTTOM", 0, -4)
-    d.hint = T.CreateFontString(d, 13, T.colors.textDim)
-    d.hint:SetPoint("BOTTOMRIGHT", -16, 16)
+    -- Input hints float under the dialog's right edge — no enclosing box.
+    d.hintFloating = true
+    d.hint = T.CreateFontString(d, 15, { 1, 1, 1, 1 })
+    d.hint:SetPoint("TOPRIGHT", d, "BOTTOMRIGHT", -6, -10)
     d.hint:SetJustifyH("RIGHT")
-    d.err = T.CreateFontString(d, 14, { 0.92, 0.30, 0.25, 1 })
+    d.err = T.CreateFontString(d, 16, { 0.92, 0.30, 0.25, 1 })
     d.err:SetPoint("TOP", d.body, "BOTTOM", 0, -8)
     d:Hide()
     return d
