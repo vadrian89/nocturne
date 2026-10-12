@@ -99,6 +99,12 @@ local function NewCell(parent)
     local a = T.colors.accent
     b.sel:SetColorTexture(a[1], a[2], a[3], 0.35)
     b.sel:Hide()
+    b.ghost = b:CreateTexture(nil, "ARTWORK", nil, 3)
+    b.ghost:SetAllPoints()
+    b.ghost:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b.ghost:SetDesaturated(true)
+    b.ghost:SetAlpha(0.85)
+    b.ghost:Hide()
     b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     return b
 end
@@ -800,13 +806,31 @@ local function MoveInvSelection(ui, dx, dy)
     ns:InventorySelect()
 end
 
+-- The item picked up by Move rides the game cursor; the selection shows a
+-- gray copy of it so the pad user sees what they are carrying.
+local function HeldItem()
+    if not GetCursorInfo then return nil end
+    local kind, itemID = GetCursorInfo()
+    if kind ~= "item" then return nil end
+    return itemID
+end
+
+local function HeldIcon()
+    local itemID = HeldItem()
+    return itemID and ItemIcon(itemID) or nil
+end
+
 function ns:InventorySelect()
     local ui = ns.invUI
     if not ui then return end
+    local held = HeldIcon()
     for _, grid in ipairs({ ui.navBags, ui.navEquip }) do
         for _, row in pairs(grid or {}) do
             for _, b in pairs(row) do
-                b.sel:SetShown(b == ui.selected)
+                local on = b == ui.selected
+                b.sel:SetShown(on)
+                if on and held then b.ghost:SetTexture(held) end
+                b.ghost:SetShown(on and held ~= nil)
             end
         end
     end
@@ -871,6 +895,15 @@ function ns:InventoryRefresh()
     end
     RenderStats(ui)
 end
+
+local function CursorChanged()
+    local ui = ns.invUI
+    if ui and ns.pageFrames[3] and ns.pageFrames[3]:IsShown() then
+        ns:InventorySelect()
+    end
+end
+Nocturne.RegisterEvent("CURSOR_CHANGED", CursorChanged)
+Nocturne.RegisterEvent("CURSOR_UPDATE", CursorChanged)
 
 local function Dirty()
     ns.invDirty = true
@@ -1583,6 +1616,10 @@ UpdateLegend = function(ui)
         Set(ui.legendY, nil)
         Set(ui.legendB, "Destroy")
     end
+    if HeldItem() then
+        Set(ui.legendA, "Place")
+        Set(ui.legendB, "Cancel")
+    end
     Set(ui.legendR3, "Reset model")
     -- Visible entries pack against the right edge (right to left); Navigate
     -- hugs the leftmost one.
@@ -1979,7 +2016,12 @@ ns.RegisterPage(3, {
     end,
     OnCancel = function()
         local ui = ns.invUI
-        return ui and PadDestroy(ui) or false
+        if not ui then return false end
+        if HeldItem() then
+            ClearCursor()
+            return true
+        end
+        return PadDestroy(ui)
     end,
     OnPadUp = function(f, button)
         local ui = ns.invUI

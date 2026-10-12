@@ -885,7 +885,8 @@ function ns:OnPadButton(button)
     elseif button == "PADLTRIGGER" or button == "PADRTRIGGER" then
         ns.trigDown[button], ns.trigUsed[button] = true, nil
     elseif button == "PAD2" or button == "PADBACK" then
-        -- A page may claim B for itself (Inventory: destroy); Select always closes.
+        -- A page may claim B for itself (Inventory: cancel move / destroy);
+        -- Select always closes.
         local def = ns.pages[ns.current]
         if button == "PAD2" and def and def.OnCancel
             and def.OnCancel(ns.pageFrames[ns.current]) then
