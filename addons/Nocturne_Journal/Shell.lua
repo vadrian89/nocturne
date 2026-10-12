@@ -1117,9 +1117,15 @@ end
 -- opts: title/body/hint text; tip(owner) anchors a tooltip to the dialog;
 -- live keeps capturing after each resolved sequence; onLive(seq) previews
 -- the pressed keys; onSeq/onButton/onClose drive the caller's state.
+-- A released modifier stays "latched" into the open sequence for a few
+-- seconds so chords work tap-style: release LT, then press the button and
+-- it still counts as LT + button. The latch resets once the modifier has
+-- not been held for this long.
+local MOD_LATCH = 5
+
 function ns:OpenSeqBind(opts)
     local d = EnsureSeqDlg()
-    local st = { seq = {}, held = {}, opts = opts }
+    local st = { seq = {}, held = {}, modLatch = {}, opts = opts }
     ns.seqBind = st
     d.title:SetText(opts.title or "")
     d.body:SetText(opts.body or "")
@@ -1151,6 +1157,8 @@ function ns:OpenSeqBind(opts)
                     if ModHeld(m) then
                         st.held[m] = true
                         st.seq[#st.seq + 1] = m
+                    elseif st.modLatch[m] then
+                        st.seq[#st.seq + 1] = m
                     end
                 end
             end
@@ -1163,7 +1171,15 @@ function ns:OpenSeqBind(opts)
             end
             if btn == "PADLTRIGGER" or btn == "PADRTRIGGER" or BAR_BTN[btn] then
                 st.held[btn] = true
-                if #st.seq < 3 then st.seq[#st.seq + 1] = btn end
+                st.modLatch[btn] = nil
+                local dup = false
+                for _, k in ipairs(st.seq) do
+                    if k == btn then
+                        dup = true
+                        break
+                    end
+                end
+                if #st.seq < 3 and not dup then st.seq[#st.seq + 1] = btn end
                 if o.onLive then o.onLive(st.seq) end
             end
             return
@@ -1175,6 +1191,16 @@ function ns:OpenSeqBind(opts)
             st.cancel = nil
             ns:CloseSeqBind()
             return
+        end
+        -- A released modifier stays latched in the open sequence for a
+        -- short window instead of resolving it right away.
+        if btn == "PADLTRIGGER" or btn == "PADRTRIGGER" then
+            for _, k in ipairs(seq) do
+                if k == btn then
+                    st.modLatch[btn] = GetTime()
+                    return
+                end
+            end
         end
         -- A chord completes when its last-pressed key is released, or when
         -- nothing is held anymore; a leftover modifier tail is dropped.
@@ -1190,8 +1216,22 @@ function ns:OpenSeqBind(opts)
         d.err:SetText(err or "")
         ns:FitDialog(d)
         if err then return end
+        wipe(st.modLatch)
         if not o.live then ns:CloseSeqBind() end
     end
+    d:SetScript("OnUpdate", function()
+        local now, dirty = GetTime()
+        for m, t in pairs(st.modLatch) do
+            if now - t > MOD_LATCH then
+                st.modLatch[m] = nil
+                for i = #st.seq, 1, -1 do
+                    if st.seq[i] == m then table.remove(st.seq, i) end
+                end
+                dirty = true
+            end
+        end
+        if dirty and st.opts.onLive then st.opts.onLive(st.seq) end
+    end)
     ns:UpdatePadMode()
 end
 
