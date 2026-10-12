@@ -190,6 +190,55 @@ local function RaceScene(f)
         tostring(race), table.concat(tried, "; "))
 end
 
+-- Dark translucent nine-slice border (the Edit Mode dialogs' look); the
+-- tooltip backdrop is the fallback when a template is absent.
+local function DlgSkin(f, tpl)
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background" })
+        f:SetBackdropColor(0.07, 0.07, 0.10, 0.94)
+    end
+    local ok, border = pcall(CreateFrame, "Frame", nil, f, tpl)
+    if ok and border then
+        border:SetAllPoints(f)
+        return
+    end
+    T.ApplyBackdrop(f)
+end
+
+-- Shared dialog chrome: translucent border, a title plaque straddling the
+-- top edge (its midline is the border's top bar, ~7px inside the frame
+-- edge like the native TitleBox anchor), centered subject/icon slots and
+-- white input hints floating under the right edge. Callers add their own
+-- content (d.content may replace the body text) and size via ns:FitDialog.
+function ns.DressDialog(d)
+    DlgSkin(d, "DialogBorderTranslucentTemplate")
+    local tb = CreateFrame("Frame", nil, d)
+    d.titleBox = tb
+    tb:SetFrameLevel(d:GetFrameLevel() + 2)
+    tb:SetPoint("CENTER", d, "TOP", 0, -7)
+    tb:SetSize(160, 40)
+    DlgSkin(tb, "DialogBorderDarkTemplate")
+    d.title = T.CreateFontString(tb, 20, T.colors.accent)
+    d.title:SetPoint("CENTER", tb)
+    d.body = T.CreateFontString(d, 17, T.colors.text)
+    d.body:SetPoint("TOP", d, "TOP", 0, -48)
+    d.subject = T.CreateFontString(d, 20, T.colors.accent)
+    d.subject:SetPoint("TOP", d.body, "BOTTOM", 0, -14)
+    d.subject:Hide()
+    d.icon = d:CreateTexture(nil, "ARTWORK")
+    d.icon:SetSize(35, 35)
+    d.icon:SetTexCoord(0.0625, 0.9375, 0.0625, 0.9375)
+    d.icon:SetPoint("TOP", d.subject, "BOTTOM", 0, -4)
+    d.icon:Hide()
+    d.hintFloating = true
+    d.hint = T.CreateFontString(d, 15, { 1, 1, 1, 1 })
+    d.hint:SetPoint("TOPRIGHT", d, "BOTTOMRIGHT", -6, -10)
+    d.hint:SetJustifyH("RIGHT")
+    d.err = T.CreateFontString(d, 16, { 0.92, 0.30, 0.25, 1 })
+    d.err:SetPoint("TOP", d.body, "BOTTOM", 0, -8)
+end
+
 function ns:CreateShell()
     if ns.frame then return end
 
@@ -260,20 +309,9 @@ function ns:CreateShell()
     c:SetFrameLevel(h:GetFrameLevel() + 20)
     c:SetSize(480, 150)
     c:SetPoint("CENTER")
-    T.ApplyBackdrop(c)
     c:EnableMouse(true)
-    -- Dialog layout rule (AGENTS.md): 16px padding all around; title, body,
-    -- then a right-aligned button bar, each section 16px apart; frame size
-    -- shrink-wraps the content.
-    c.title = T.CreateFontString(c, 17, T.colors.text)
-    c.title:SetPoint("TOP", 0, -16)
-    c.title:SetJustifyH("CENTER")
-    c.body = T.CreateFontString(c, 15, T.colors.accent)
-    c.body:SetPoint("TOP", c.title, "BOTTOM", 0, -16)
+    ns.DressDialog(c)
     c.body:SetJustifyH("CENTER")
-    c.hint = T.CreateFontString(c, 14, T.colors.textDim)
-    c.hint:SetPoint("BOTTOMRIGHT", -16, 16)
-    c.hint:SetJustifyH("RIGHT")
     c:SetScript("OnHide", function()
         c.onConfirm = nil
         if ns.modal == c then ns.modal = nil end
@@ -552,15 +590,23 @@ function ns:FitDialog(d)
     local pad = d.titleBox and 48 or 16
     local padY = d.titleBox and 48 or 16
     if d.titleBox then
-        d.body:ClearAllPoints()
-        d.body:SetPoint("TOP", d, "TOP", 0, -padY)
+        for _, w in ipairs({ d.body, d.content }) do
+            if w then
+                w:ClearAllPoints()
+                w:SetPoint("TOP", d, "TOP", 0, -padY)
+            end
+        end
     end
     local h = (d.titleBox and padY or 16 + DlgTextH(d.title) + 16) + bodyH
-    local below = d.body
+    local below = content or d.body
     if d.subject and d.subject:IsShown() then
+        d.subject:ClearAllPoints()
+        d.subject:SetPoint("TOP", below, "BOTTOM", 0, -14)
         h = h + 14 + DlgTextH(d.subject)
         below = d.subject
         if d.icon and d.icon:IsShown() then
+            d.icon:ClearAllPoints()
+            d.icon:SetPoint("TOP", d.subject, "BOTTOM", 0, -4)
             h = h + 4 + d.icon:GetHeight()
             below = d.icon
         end
@@ -928,22 +974,6 @@ end
 -- bar below, action tooltip anchored flush right (ns.TipRight).
 local seqDlg
 
--- Dark translucent nine-slice border (the Edit Mode dialogs' look); the
--- tooltip backdrop is the fallback when a template is absent.
-local function DlgSkin(f, tpl)
-    if f.SetBackdrop then
-        f:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background" })
-        f:SetBackdropColor(0.07, 0.07, 0.10, 0.94)
-    end
-    local ok, border = pcall(CreateFrame, "Frame", nil, f, tpl)
-    if ok and border then
-        border:SetAllPoints(f)
-        return
-    end
-    T.ApplyBackdrop(f)
-end
-
 local function EnsureSeqDlg()
     if seqDlg then return seqDlg end
     local d = CreateFrame("Frame", "NocturneJournalSeqBind", ns.frame)
@@ -953,33 +983,7 @@ local function EnsureSeqDlg()
     d:SetSize(430, 170)
     d:SetFrameLevel(ns.header:GetFrameLevel() + 50)
     d:EnableMouse(true)
-    DlgSkin(d, "DialogBorderTranslucentTemplate")
-    -- Title plaque straddling the top edge, like the native bind dialog.
-    local tb = CreateFrame("Frame", nil, d)
-    d.titleBox = tb
-    tb:SetFrameLevel(d:GetFrameLevel() + 2)
-    -- The border art's top bar sits ~7px inside the frame edge (native
-    -- TitleBox is anchored CENTER/TOP y=-7): that is the plaque's midline.
-    tb:SetPoint("CENTER", d, "TOP", 0, -7)
-    tb:SetSize(160, 40)
-    DlgSkin(tb, "DialogBorderDarkTemplate")
-    d.title = T.CreateFontString(tb, 20, T.colors.accent)
-    d.title:SetPoint("CENTER", tb)
-    d.body = T.CreateFontString(d, 17, T.colors.text)
-    d.body:SetPoint("TOP", tb, "BOTTOM", 0, -14)
-    d.subject = T.CreateFontString(d, 20, T.colors.accent)
-    d.subject:SetPoint("TOP", d.body, "BOTTOM", 0, -14)
-    d.icon = d:CreateTexture(nil, "ARTWORK")
-    d.icon:SetSize(35, 35)
-    d.icon:SetTexCoord(0.0625, 0.9375, 0.0625, 0.9375)
-    d.icon:SetPoint("TOP", d.subject, "BOTTOM", 0, -4)
-    -- Input hints float under the dialog's right edge — no enclosing box.
-    d.hintFloating = true
-    d.hint = T.CreateFontString(d, 15, { 1, 1, 1, 1 })
-    d.hint:SetPoint("TOPRIGHT", d, "BOTTOMRIGHT", -6, -10)
-    d.hint:SetJustifyH("RIGHT")
-    d.err = T.CreateFontString(d, 16, { 0.92, 0.30, 0.25, 1 })
-    d.err:SetPoint("TOP", d.body, "BOTTOM", 0, -8)
+    ns.DressDialog(d)
     d:Hide()
     return d
 end

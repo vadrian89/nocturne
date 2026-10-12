@@ -291,8 +291,9 @@ ns.RegisterPage(2, {
             local item = ui.selected
             if not item or not item.logIndex then return end
             local qid, title = item.qid, item.title
-            ns:ShowConfirm(("Abandon quest \"%s\"?"):format(title or "?"),
-                nil, "Abandon", function()
+            ns:ShowConfirm("Please confirm",
+                ("Do you want to abandon %s?"):format(title or "?"),
+                "Abandon", function()
                     -- SetAbandonQuest takes no argument: it targets the
                     -- selected quest. Blizzard's own flow selects first.
                     local prev = C_QuestLog.GetSelectedQuest

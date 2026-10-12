@@ -987,12 +987,14 @@ local function PadDestroy(ui)
             if DeleteCursorItem then DeleteCursorItem() end
         end
     end
-    ns:ShowConfirm(("Destroy \"%s\"?"):format(name), nil, "Destroy", destroy)
+    ns:ShowConfirm("Please confirm",
+        ("Do you want to destroy %s?"):format(name),
+        "Destroy", destroy)
     return true
 end
 
--- Small in-page dialogs (split stepper, bind capture) swallow all pad input
--- through ns.padCapture and drop PadBind so every key reaches the capture.
+-- The in-page split dialog swallows all pad input through ns.padCapture and
+-- drops PadBind so every key reaches the capture.
 local function CloseDlg(ui)
     ns.padCapture = nil
     ui.dlgOpen = nil
@@ -1012,6 +1014,8 @@ local function OpenDlg(ui, title, hint)
     d.body:SetText("")
     d.err:SetText("")
     d.hint:SetText(hint or "")
+    d.subject:Hide()
+    d.icon:Hide()
     d.content:Hide()
     d.body:Show()
     ui.dlgOpen = true
@@ -1131,7 +1135,13 @@ local function OpenSplitDlg(ui)
     local name = info.itemName
         or (GetItemInfo and GetItemInfo(info.itemID)) or "item"
     ui.split = { bag = b.bag, slot = b.slot, max = info.stackCount, n = 1 }
-    OpenDlg(ui, "Split " .. name, PadHint("Amount", "Split", "Cancel"))
+    OpenDlg(ui, "Split", PadHint("Amount", "Split", "Cancel"))
+    ui.dlg.subject:SetText(name)
+    ui.dlg.subject:Show()
+    if info.iconFileID then
+        ui.dlg.icon:SetTexture(info.iconFileID)
+        ui.dlg.icon:Show()
+    end
     local max = ui.split.max
     local row = ShowRows(ui, { "1 / " .. max }, { max .. " / " .. max }).rows[1]
     row.hl:Show()
@@ -1351,7 +1361,9 @@ local function OpenBindDlg(ui)
     end
     ui.dlgOpen = true
     ns:OpenSeqBind {
-        title = "Bind " .. name,
+        title = "Bind Item",
+        subject = name,
+        icon = info.iconFileID,
         tip = function(d)
             ns.TipRight(d)
             if info.hyperlink then
@@ -1831,32 +1843,19 @@ ns.RegisterPage(3, {
         ui.legendR3 = LegendEntry("PADRSTICK", ui.legendB, "R3")
         ui.legend = legend
 
-        -- Shared small dialog for the split stepper and the bind capture.
+        -- Shared small dialog for the split stepper. Same chrome as the
+        -- other journal dialogs (title plaque, floating hints).
         local dlg = CreateFrame("Frame", nil, f)
         ui.dlg = dlg
         dlg:SetSize(430, 170)
         dlg:SetPoint("CENTER", f, "CENTER")
         dlg:SetFrameLevel(f:GetFrameLevel() + 60)
-        T.ApplyBackdrop(dlg)
-        -- Dialog layout: 16px padding all around; title, body, then the
-        -- bottom button bar, each section 16px apart; errors sit in the
-        -- body 8px under the active element. Size wraps the content.
-        dlg.title = T.CreateFontString(dlg, 17, TEXT)
-        dlg.title:SetPoint("TOP", 0, -16)
-        -- Button bar: input hints (and later real buttons for
-        -- mouse/keyboard) live here, right-aligned.
-        dlg.hint = T.CreateFontString(dlg, 13, DIM_COLOR)
-        dlg.hint:SetPoint("BOTTOMRIGHT", -16, 16)
-        dlg.hint:SetJustifyH("RIGHT")
-        dlg.body = T.CreateFontString(dlg, 15, TEXT)
-        dlg.body:SetPoint("TOP", dlg.title, "BOTTOM", 0, -16)
-        -- Optional body replacement (More menu rows), sized by its owner.
+        ns.DressDialog(dlg)
+        -- Optional body replacement (menu rows), sized by its owner.
         dlg.content = CreateFrame("Frame", nil, dlg)
-        dlg.content:SetPoint("TOP", dlg.title, "BOTTOM", 0, -16)
+        dlg.content:SetPoint("TOP", dlg, "TOP", 0, -48)
         dlg.content.rows = {}
         dlg.content:Hide()
-        dlg.err = T.CreateFontString(dlg, 14, { 0.92, 0.30, 0.25, 1 })
-        dlg.err:SetPoint("TOP", dlg.body, "BOTTOM", 0, -8)
         dlg:Hide()
         local nav = T.CreateFontString(legend, 15, TEXT)
         ui.legendNav = nav
