@@ -185,6 +185,45 @@ function ns.NewList(parent, o)
     return list
 end
 
+-- Held D-pad key repeat with a gentle speed ramp: the interval eases from
+-- 0.22s down to a 0.11s floor over ~1.4s. Shared by every page — call
+-- `hold[button] = { t = 0, acc = 0 }` on press, `hold[button] = nil` on up.
+function ns.DpadHoldFrame(frame, onTick)
+    local hold = {}
+    frame:SetScript("OnUpdate", function(_, dt)
+        for button, st in pairs(hold) do
+            st.t = st.t + dt
+            st.acc = st.acc + dt
+            local iv = math.max(0.11, 0.22 - st.t * 0.08)
+            if st.acc >= iv then
+                st.acc = 0
+                onTick(button)
+            end
+        end
+    end)
+    return hold
+end
+
+-- Directional nearest pick for free-form graphs (talent trees): of the
+-- nodes in the direction's half-plane, the winner minimizes perpendicular
+-- offset with a light distance term — same family as the inventory nav.
+function ns.NavNearest(nodes, cur, dx, dy)
+    local c = cur
+    if not c then return end
+    local best, bs
+    for _, n in ipairs(nodes) do
+        if n ~= c then
+            local fwd = (n.x - c.x) * dx + (n.y - c.y) * dy
+            if fwd > 0.0001 then
+                local perp = math.abs((n.x - c.x) * dy - (n.y - c.y) * dx)
+                local score = perp * 4 + fwd * 0.02
+                if not bs or score < bs then best, bs = n, score end
+            end
+        end
+    end
+    return best
+end
+
 -- Row for a quest/chain entry: 14px atlas icon + text. Color is picked by
 -- the setter via row.label:SetTextColor.
 function ns.NewListRow(listRow, darkText, fontSize)

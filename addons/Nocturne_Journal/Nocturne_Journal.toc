@@ -22,5 +22,6 @@ QuestArchive.lua
 Pages\Quests.lua
 Pages\Inventory.lua
 Pages\Abilities.lua
+Pages\Talents.lua
 Binding.lua
 Options.lua

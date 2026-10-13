@@ -1923,28 +1923,15 @@ ns.RegisterPage(3, {
         end
         view:SetPoint("RIGHT", nav, "LEFT", -26, 0)
 
-        -- Held D-pad repeats with the same gentle ramp as the quest list.
-        ui.dpadHold = {}
-        local function Move(dx, dy)
-            MoveInvSelection(ui, dx, dy)
-        end
-        f:SetScript("OnUpdate", function(_, dt)
-            for button, st in pairs(ui.dpadHold) do
-                st.t = st.t + dt
-                st.acc = st.acc + dt
-                local iv = math.max(0.11, 0.22 - st.t * 0.08)
-                if st.acc >= iv then
-                    st.acc = 0
-                    if button == "PADDUP" then
-                        Move(0, -1)
-                    elseif button == "PADDDOWN" then
-                        Move(0, 1)
-                    elseif button == "PADDLEFT" then
-                        Move(-1, 0)
-                    elseif button == "PADDRIGHT" then
-                        Move(1, 0)
-                    end
-                end
+        ui.dpadHold = ns.DpadHoldFrame(f, function(button)
+            if button == "PADDUP" then
+                MoveInvSelection(ui, 0, -1)
+            elseif button == "PADDDOWN" then
+                MoveInvSelection(ui, 0, 1)
+            elseif button == "PADDLEFT" then
+                MoveInvSelection(ui, -1, 0)
+            elseif button == "PADDRIGHT" then
+                MoveInvSelection(ui, 1, 0)
             end
         end)
 

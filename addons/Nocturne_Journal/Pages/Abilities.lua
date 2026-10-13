@@ -846,17 +846,8 @@ ns.RegisterPage(4, {
             if f:IsShown() and ui.sections then Relayout(ui) end
         end)
 
-        -- Held D-pad repeats, same ramp as the quests page.
-        f:SetScript("OnUpdate", function(_, dt)
-            for button, st in pairs(ui.dpadHold) do
-                st.t = st.t + dt
-                st.acc = st.acc + dt
-                local iv = math.max(0.11, 0.22 - st.t * 0.08)
-                if st.acc >= iv then
-                    st.acc = 0
-                    MoveSelection(ui, button)
-                end
-            end
+        ui.dpadHold = ns.DpadHoldFrame(f, function(button)
+            MoveSelection(ui, button)
         end)
     end,
     OnShow = function(f)

@@ -251,6 +251,21 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   for `CrossBarModifierStateChanged`, so a native LT/RT press rewrites
   `activeBar` cleanly — a tainted field self-heals on the next modifier
   press after the journal closes.
+- Forever's talent system is `C_Traits`/`C_ClassTalents` (proven via
+  `/njrn diag`, Paladin lvl 6): `GetActiveConfigID` → one tree
+  (`treeIDs=[1100]`, `GetTreeInfo` title/root/kit nil, gates 0) whose
+  ~50 nodes split into sections by `groupIDs` (e.g. 11480/11486,
+  11482/11486/12745) — NOT by currency (single `GetTreeCurrencyInfo`
+  entry, all zeros) and NOT by `subTreeID` (nil; no hero talents).
+  Forever-only APIs: `C_Traits.GetGroupDisplayInfoByTreeID`,
+  `GetGroupCurrencyInfo`, `GetMaxAvailableTraitCurrency`,
+  `GetTraitCurrencyForAchievement`; `C_ClassTalents.
+  SwitchToSpecializationByIndex/ByName` (native dual-spec) and
+  `GetTraitTreeForSpec`. `GetConfigsByType(Combat)` returns empty —
+  use `GetActiveConfigID`. `GetTalentInfo`/`GetTalentTabInfo` don't
+  exist. `GetNodeInfo.posX/posY` use a large grid (~1620..2220 ×
+  ~4530..5730). Trait events present: `PLAYER_TALENT_UPDATE`,
+  `TRAIT_CONFIG_LIST_UPDATED`.
 - For "is pad key X held" use `IsKeyDown("PADLTRIGGER")` — physical state,
   the same source `GamepadMode.IsBindingDown` uses. Forever's
   `GetDeviceMappedState().buttons` misreports triggers (LT alone can read

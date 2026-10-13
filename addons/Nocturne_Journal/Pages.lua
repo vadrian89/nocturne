@@ -74,14 +74,4 @@ ns.JournalGap = GAP
 
 -- Page 4 lives in Pages/Abilities.lua.
 
--- Page 5: Talents
-ns.RegisterPage(5, {
-    key = "talents",
-    title = "Talents",
-    Build = function(f)
-        local bg = f:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        SetBackground("talents", bg, "talents-background")
-        ComingSoon(f, "Talents")
-    end,
-})
+-- Page 5 lives in Pages/Talents.lua.

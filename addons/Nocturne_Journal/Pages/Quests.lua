@@ -346,19 +346,8 @@ ns.RegisterPage(2, {
         end
         ns.moveSelection = MoveSelection
 
-        -- Held D-pad keys repeat with a gentle speed ramp: the repeat
-        -- interval eases from 0.22s down to a 0.11s floor over ~1.4s.
-        ui.dpadHold = {}
-        f:SetScript("OnUpdate", function(_, dt)
-            for button, st in pairs(ui.dpadHold) do
-                st.t = st.t + dt
-                st.acc = st.acc + dt
-                local iv = math.max(0.11, 0.22 - st.t * 0.08)
-                if st.acc >= iv then
-                    st.acc = 0
-                    MoveSelection(button == "PADDUP" and -1 or 1)
-                end
-            end
+        ui.dpadHold = ns.DpadHoldFrame(f, function(button)
+            MoveSelection(button == "PADDUP" and -1 or 1)
         end)
 
         -- Pad legend, bottom-right: [X] action  [Y] action  [A] action.

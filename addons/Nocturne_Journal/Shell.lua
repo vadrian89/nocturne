@@ -446,6 +446,7 @@ function ns:UpdateSubBar()
         return
     end
     ns.subTitles = titles
+    if ns.subCurrent > #titles then ns.subCurrent = #titles end
     -- A page can render its own sub-tab row; the global bar stays hidden but
     -- LT/RT still route through SetSubPage.
     if def.ownSubBar then
