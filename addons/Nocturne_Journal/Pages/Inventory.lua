@@ -1662,12 +1662,7 @@ ns.RegisterPage(3, {
         local ui = ns.invUI
         if not ui then return end
         ui.focus = i
-        for j, b in ipairs(ui.subTabs) do
-            local on = j == i
-            local c = on and HEADER_COLOR or TEXT
-            b.label:SetTextColor(c[1], c[2], c[3])
-            b.line:SetShown(on)
-        end
+        ns.PaintSubTabRow(ui.subBar, i)
         ui.nav = i == 1 and ui.navBags or ui.navEquip
         ui.selected = ui.nav and ui.nav[1] and ui.nav[1][1]
         UpdateLegend(ui)
@@ -1681,47 +1676,9 @@ ns.RegisterPage(3, {
 
         -- Focus switcher, shrink-wrapped and centered over both panels:
         -- [LT] Bags  Equipped [RT]
-        local subBar = CreateFrame("Frame", nil, f)
+        local subBar = ns.NewSubTabRow(f, { "Bags", "Equipped" })
+        ui.subBar = subBar
         subBar:SetPoint("TOP", f, "TOP", 0, -16)
-        subBar:SetHeight(36)
-        local lt = T.CreateFontString(subBar, 20, T.colors.textDim)
-        lt:SetText(ns.PadGlyph("PADLTRIGGER", "LT"))
-        local rt = T.CreateFontString(subBar, 20, T.colors.textDim)
-        rt:SetText(ns.PadGlyph("PADRTRIGGER", "RT"))
-        ui.subTabs = {}
-        local parts = { lt }
-        for i, name in ipairs({ "Bags", "Equipped" }) do
-            local b = CreateFrame("Button", nil, subBar)
-            b:SetHeight(36)
-            b.label = T.CreateFontString(b, 26)
-            b.label:SetPoint("CENTER")
-            b.label:SetText(name)
-            b:SetWidth(b.label:GetStringWidth() + 8)
-            b.line = b:CreateTexture(nil, "OVERLAY")
-            b.line:SetPoint("BOTTOMLEFT", 4, 3)
-            b.line:SetPoint("BOTTOMRIGHT", -4, 3)
-            b.line:SetHeight(2)
-            local a = T.colors.accent
-            b.line:SetColorTexture(a[1], a[2], a[3], 1)
-            b:SetScript("OnClick", function() ns:SetSubPage(i) end)
-            ui.subTabs[i] = b
-            parts[#parts + 1] = b
-        end
-        parts[#parts + 1] = rt
-        local function Width(p)
-            return p.GetStringWidth and p:GetStringWidth() or p:GetWidth()
-        end
-        local GAPX = 18
-        local total = 0
-        for _, p in ipairs(parts) do total = total + Width(p) end
-        total = total + GAPX * (#parts - 1)
-        subBar:SetSize(math.ceil(total), 36)
-        local x = -total / 2
-        for _, p in ipairs(parts) do
-            p:ClearAllPoints()
-            p:SetPoint("LEFT", subBar, "CENTER", x, 0)
-            x = x + Width(p) + GAPX
-        end
 
         local bags = CreateFrame("Frame", nil, f)
         bags:SetPoint("TOPLEFT", MARGIN, -MARGIN - 44)

@@ -6,8 +6,10 @@ local T = Nocturne.Theme
 local MARGIN = ns.JournalMargin
 
 local NODE = 69
-local SPECBAR_H = 36
-local TOPPAD = SPECBAR_H + 6
+-- Spec tab row placed like Inventory's: 16px from the top, columns from
+-- MARGIN + 44 (16px under the 36px row).
+local TABROW_Y = 16
+local TOPPAD = MARGIN + 44
 local BOTTOMPAD = 34
 local HEADPAD = 8
 local HEADICON = 48
@@ -39,13 +41,67 @@ local RANK_GRAY = { 0.62, 0.62, 0.68, 1 }
 
 local Flag = ns.Flag
 
-local function LoadConfig()
-    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID
-            and C_Traits and C_Traits.GetConfigInfo) then
-        return
+local SI = C_SpecializationInfo
+
+-- Forever's dual spec (Camelot ClassTalentsFrame): talent groups 1/2 are
+-- tabs, each with its own combat config (GetCombatConfigIDForSpecGroup,
+-- nil until the group is first activated); group 2 unlocks when
+-- GetNumSpecGroups() > 1 (level 40).
+local function HasSpecTabs()
+    return Nocturne.IS_FOREVER and SI
+        and SI.GetCombatConfigIDForSpecGroup ~= nil or false
+end
+
+local function ActiveSpecGroup()
+    if SI and SI.GetActiveSpecGroup then
+        local ok, g = pcall(SI.GetActiveSpecGroup)
+        if ok and type(g) == "number" and g >= 1 then return g end
     end
-    local ok, cfg = pcall(C_ClassTalents.GetActiveConfigID)
-    if not ok or ns.IsSecret(cfg) then return end
+    return 1
+end
+
+local function SpecGroupUnlocked(g)
+    if g == 1 then return true end
+    if not GetNumSpecGroups then return false end
+    local ok, n = pcall(GetNumSpecGroups)
+    return ok and type(n) == "number" and n >= g
+end
+
+-- No API reports the unlock level (Forever's TALENT_SPEC_LOCKED is just
+-- "Locked"); group 2 unlocks at 40 per the user's Forever client.
+local DUAL_SPEC_LEVEL = 40
+
+local function LockedText()
+    local lvl = UnitLevel("player") or 0
+    if lvl >= DUAL_SPEC_LEVEL then
+        return type(TALENT_SPEC_LOCKED) == "string" and TALENT_SPEC_LOCKED
+            or "Locked"
+    end
+    local fmt = FEATURE_BECOMES_AVAILABLE_AT_LEVEL
+    local ok, txt = false, nil
+    if type(fmt) == "string" and fmt:find("%d", 1, true) then
+        ok, txt = pcall(string.format, fmt, DUAL_SPEC_LEVEL)
+    end
+    if not ok then
+        txt = ("Unlocks at level %d"):format(DUAL_SPEC_LEVEL)
+    end
+    return ("%s\n(level %d now)"):format(txt, lvl)
+end
+
+local function CanActivate(g)
+    return g ~= nil and g ~= ActiveSpecGroup() and SpecGroupUnlocked(g)
+end
+
+-- group: the dual-spec tab to read (Forever); nil = the active config.
+local function LoadConfig(group)
+    if not (C_Traits and C_Traits.GetConfigInfo) then return end
+    local ok, cfg
+    if group then
+        ok, cfg = pcall(SI.GetCombatConfigIDForSpecGroup, group)
+    elseif C_ClassTalents and C_ClassTalents.GetActiveConfigID then
+        ok, cfg = pcall(C_ClassTalents.GetActiveConfigID)
+    end
+    if not (ok and cfg) or ns.IsSecret(cfg) then return end
     local ok2, info = pcall(C_Traits.GetConfigInfo, cfg)
     if not (ok2 and info and info.treeIDs) then return end
     for _, tid in ipairs(info.treeIDs) do
@@ -263,10 +319,17 @@ function ns:TalentsEnsureData()
     if ns.talData then return ns.talData end
     local data = { secs = {} }
     ns.talData = data
-    local cfg, tid = LoadConfig()
+    local view = ns.talView
+    local cfg, tid = LoadConfig(view)
     data.cfg = cfg
     if not cfg then
-        data.err = "no trait config"
+        if view and not SpecGroupUnlocked(view) then
+            data.err = LockedText()
+        elseif view then
+            data.err = ("Spec %d hasn't been activated yet"):format(view)
+        else
+            data.err = "no trait config"
+        end
         return data
     end
     data.configID, data.treeID = cfg, tid
@@ -777,58 +840,34 @@ local function ApplyColBg(col, sec, x0, x1, W, H, atlas, su0, su1, own)
     return "none"
 end
 
--- Forever carries the classic dual-talent-spec feature through
--- C_ClassTalents.SwitchToSpecializationByIndex: index = talent group.
-local function ActiveSpecGroup()
-    if GetActiveTalentGroup then
-        local ok, g = pcall(GetActiveTalentGroup)
-        if ok and type(g) == "number" and g >= 1 then return g end
-    end
-    if GetSpecialization then
-        local ok, g = pcall(GetSpecialization)
-        if ok and type(g) == "number" and g >= 1 and g <= 2 then
-            return g
-        end
-    end
-    return 1
-end
-
-local function NumSpecGroups()
-    if GetNumTalentGroups then
-        local ok, n = pcall(GetNumTalentGroups)
-        if ok and type(n) == "number" and n >= 1 then return n end
-    end
-    return C_ClassTalents and C_ClassTalents.SwitchToSpecializationByIndex
-        and 2 or 1
-end
-
 local function UpdateSpecBar(ui)
-    if not ui.specL then return end
-    local active = ActiveSpecGroup()
-    local num = NumSpecGroups()
-    for i = 1, 2 do
-        local s = ui.specL[i]
-        if i <= num then
-            s:SetText("Spec " .. i .. (i == active and " — activ" or ""))
-            local c = i == active and T.colors.accent or T.colors.textDim
-            s:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-            s:Show()
-        else
-            s:Hide()
+    local view = ns.talView
+    if ui.tabRow then
+        local active = ActiveSpecGroup()
+        local off = {}
+        for g, b in ipairs(ui.tabRow.tabs) do
+            local open = SpecGroupUnlocked(g)
+            b.label:SetText("Spec " .. g .. (g == active and " (active)"
+                or not open and (" (level %d)"):format(DUAL_SPEC_LEVEL)
+                or ""))
+            off[g] = open and T.colors.text or T.colors.textDim
         end
+        ns.LayoutSubTabRow(ui.tabRow)
+        ns.PaintSubTabRow(ui.tabRow, view or active, off)
     end
+    ui.legend:SetText(ui.legendNav .. (CanActivate(view)
+        and ("      " .. ns.PadGlyph("PAD3", "X") .. "  Activate") or ""))
 end
 
-local function SwitchSpec()
-    if InCombatLockdown() then return end
-    local sw = C_ClassTalents
-        and C_ClassTalents.SwitchToSpecializationByIndex
-    if not sw then return end
-    local other = ActiveSpecGroup() == 1 and 2 or 1
-    ns:ShowConfirm("Schimbi specializarea?",
-        "Activezi grupul de talente " .. other .. ".",
+local function ActivateViewedSpec()
+    local g = ns.talView
+    if InCombatLockdown() or not CanActivate(g) then return end
+    local set = (SI and SI.SetActiveSpecGroup) or (C_ClassTalents
+        and C_ClassTalents.SwitchToSpecializationByIndex)
+    if not set then return end
+    ns:ShowConfirm("Schimbi specializarea?", "Activezi Spec " .. g .. ".",
         "Schimba", function()
-            pcall(sw, other)
+            pcall(set, g)
         end)
 end
 
@@ -1082,6 +1121,10 @@ end
 ns.RegisterPage(5, {
     key = "talents",
     title = "Talents",
+    subPages = function()
+        return HasSpecTabs() and { "Spec 1", "Spec 2" } or nil
+    end,
+    ownSubBar = true,
     Build = function(f)
         local ui = {}
         ns.talUI = ui
@@ -1098,35 +1141,27 @@ ns.RegisterPage(5, {
         ui.canvas:SetAllPoints()
         ui.canvas:SetFrameLevel(ui.colHost:GetFrameLevel() + 5)
 
-        ui.empty = T.CreateFontString(f, 16, T.colors.textDim)
+        ui.empty = T.CreateFontString(f, 22, T.colors.textDim)
         ui.empty:SetPoint("CENTER")
+        ui.empty:SetJustifyH("CENTER")
         ui.empty:Hide()
 
-        -- Dual-spec slot strip across the top; column contents start
-        -- below it (TOPPAD).
-        ui.specBar = CreateFrame("Frame", nil, f)
-        ui.specBar:SetPoint("TOPLEFT")
-        ui.specBar:SetPoint("TOPRIGHT")
-        ui.specBar:SetHeight(SPECBAR_H)
-        ui.specL = {}
-        for i = 1, 2 do
-            local s = T.CreateFontString(ui.specBar, 15, T.colors.textDim)
-            s:SetPoint("TOPLEFT", MARGIN + (i - 1) * 140, -9)
-            ui.specL[i] = s
+        -- Dual-spec tabs (Forever) across the top; column contents start
+        -- below them (TOPPAD).
+        if HasSpecTabs() then
+            ui.tabRow = ns.NewSubTabRow(f, { "Spec 1", "Spec 2" })
+            ui.tabRow:SetPoint("TOP", f, "TOP", 0, -TABROW_Y)
         end
 
         -- Parented to the canvas so it draws above the spec frames.
-        local legend = T.CreateFontString(ui.canvas, 15, T.colors.text)
+        ui.legend = T.CreateFontString(ui.canvas, 15, T.colors.text)
         local up = ns.PadGlyph("PADDUP")
         local down = ns.PadGlyph("PADDDOWN")
         local dpad = (up and up:find("|") and down and down:find("|"))
             and (up .. down) or "D-Pad"
-        local xg = ns.PadGlyph("PAD3")
-        local specTxt = (C_ClassTalents
-                and C_ClassTalents.SwitchToSpecializationByIndex)
-            and ("      " .. (xg or "X") .. "  Spec") or ""
-        legend:SetText(dpad .. "  Navigate" .. specTxt)
-        legend:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
+        ui.legendNav = dpad .. "  Navigate"
+        ui.legend:SetText(ui.legendNav)
+        ui.legend:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
 
         ui.dpadHold = ns.DpadHoldFrame(f, function(btn)
             local d = DIR[btn]
@@ -1139,14 +1174,25 @@ ns.RegisterPage(5, {
             end
         end)
     end,
-    OnShow = function(f)
-        if ns.talentsDirty or not ns.talData then Reload() end
+    -- Opens on the active spec's tab; SetPage calls OnSubPage right
+    -- after, which loads and renders.
+    OnShow = function()
+        if HasSpecTabs() then ns.subCurrent = ActiveSpecGroup() end
+    end,
+    OnSubPage = function(f, i)
         local ui = ns.talUI
-        if ui then RenderAll(f, ui) end
+        if not ui then return end
+        local view = HasSpecTabs() and i or nil
+        if view ~= ns.talView or ns.talentsDirty or not ns.talData then
+            if view ~= ns.talView then ui.sel = nil end
+            ns.talView = view
+            Reload()
+        end
+        RenderAll(f, ui)
     end,
     OnPad = function(f, button)
         if button == "PAD3" then
-            SwitchSpec()
+            ActivateViewedSpec()
             return
         end
         local d = DIR[button]

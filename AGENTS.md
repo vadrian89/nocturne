@@ -266,6 +266,13 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
   exist. `GetNodeInfo.posX/posY` use a large grid (~1620..2220 ×
   ~4530..5730). Trait events present: `PLAYER_TALENT_UPDATE`,
   `TRAIT_CONFIG_LIST_UPDATED`.
+- Dual spec on Forever (proven via `/njrn diag`, Paladin lvl 7): talent
+  groups via `C_SpecializationInfo.GetActiveSpecGroup` (1),
+  `GetNumSpecGroups()` (1 while locked), `GetCombatConfigIDForSpecGroup(g)`
+  (group 1 = the active config, group 2 nil while locked);
+  `SetActiveSpecGroup` exists. No API reports the unlock level and
+  `TALENT_SPEC_LOCKED` is just "Locked". *(Unverified: unlock at 40,
+  activation from addon code.)*
 - For "is pad key X held" use `IsKeyDown("PADLTRIGGER")` — physical state,
   the same source `GamepadMode.IsBindingDown` uses. Forever's
   `GetDeviceMappedState().buttons` misreports triggers (LT alone can read

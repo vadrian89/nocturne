@@ -240,3 +240,70 @@ function ns.NewListRow(listRow, darkText, fontSize)
     listRow.label:SetWordWrap(false)
     listRow:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 end
+
+-- Page-owned sub-tab row, shrink-wrapped and centered on its own frame:
+-- [LT] name  name [RT]. Pages that set ownSubBar build one, anchor it
+-- and repaint it from OnSubPage.
+local SUBTAB_H, SUBTAB_GAPX = 36, 18
+
+function ns.LayoutSubTabRow(bar)
+    local parts = { bar.lt }
+    for _, b in ipairs(bar.tabs) do
+        b:SetWidth(b.label:GetStringWidth() + 8)
+        parts[#parts + 1] = b
+    end
+    parts[#parts + 1] = bar.rt
+    local function Width(p)
+        return p.GetStringWidth and p:GetStringWidth() or p:GetWidth()
+    end
+    local total = 0
+    for _, p in ipairs(parts) do total = total + Width(p) end
+    total = total + SUBTAB_GAPX * (#parts - 1)
+    -- A zero-size frame can leave its children unrendered; give the
+    -- switcher its real rect.
+    bar:SetSize(math.ceil(total), SUBTAB_H)
+    local x = -total / 2
+    for _, p in ipairs(parts) do
+        p:ClearAllPoints()
+        p:SetPoint("LEFT", bar, "CENTER", x, 0)
+        x = x + Width(p) + SUBTAB_GAPX
+    end
+end
+
+function ns.NewSubTabRow(parent, names)
+    local bar = CreateFrame("Frame", nil, parent)
+    bar:SetHeight(SUBTAB_H)
+    bar.lt = T.CreateFontString(bar, 20, T.colors.textDim)
+    bar.lt:SetText(ns.PadGlyph("PADLTRIGGER", "LT"))
+    bar.rt = T.CreateFontString(bar, 20, T.colors.textDim)
+    bar.rt:SetText(ns.PadGlyph("PADRTRIGGER", "RT"))
+    bar.tabs = {}
+    for i, name in ipairs(names) do
+        local b = CreateFrame("Button", nil, bar)
+        b:SetHeight(SUBTAB_H)
+        b.label = T.CreateFontString(b, 26)
+        b.label:SetPoint("CENTER")
+        b.label:SetText(name)
+        b.line = b:CreateTexture(nil, "OVERLAY")
+        b.line:SetPoint("BOTTOMLEFT", 4, 3)
+        b.line:SetPoint("BOTTOMRIGHT", -4, 3)
+        b.line:SetHeight(2)
+        local a = T.colors.accent
+        b.line:SetColorTexture(a[1], a[2], a[3], 1)
+        b:SetScript("OnClick", function() ns:SetSubPage(i) end)
+        bar.tabs[i] = b
+    end
+    ns.LayoutSubTabRow(bar)
+    return bar
+end
+
+-- offColor per tab (optional) lets a page dim unavailable tabs.
+function ns.PaintSubTabRow(bar, current, offColors)
+    for j, b in ipairs(bar.tabs) do
+        local on = j == current
+        local c = on and T.colors.accent
+            or (offColors and offColors[j]) or T.colors.text
+        b.label:SetTextColor(c[1], c[2], c[3])
+        b.line:SetShown(on)
+    end
+end

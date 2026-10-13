@@ -227,6 +227,16 @@ function ns:DiagText()
         tryf(GetActiveTalentGroup), tryf(GetNumTalentGroups),
         val(C_ClassTalents and C_ClassTalents.SwitchToSpecializationByIndex ~= nil),
         val(C_ClassTalents and C_ClassTalents.SwitchToSpecializationByName ~= nil)))
+    local si = C_SpecializationInfo
+    if si then
+        add(("  dualspec active=%s numGroups=%s cfg1=%s cfg2=%s set=%s"):format(
+            tryf(si.GetActiveSpecGroup), tryf(GetNumSpecGroups),
+            si.GetCombatConfigIDForSpecGroup
+                and tryv(si.GetCombatConfigIDForSpecGroup, 1) or "-",
+            si.GetCombatConfigIDForSpecGroup
+                and tryv(si.GetCombatConfigIDForSpecGroup, 2) or "-",
+            val(si.SetActiveSpecGroup ~= nil)))
+    end
     if C_ClassTalents and C_ClassTalents.GetActiveConfigID then
         add("  configID=" .. tryv(C_ClassTalents.GetActiveConfigID))
         if C_ClassTalents.HasUnspentTalentPoints then
