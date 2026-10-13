@@ -41,6 +41,10 @@ local RANK_GRAY = { 0.62, 0.62, 0.68, 1 }
 
 local Flag = ns.Flag
 
+-- Forward declarations: the spec-switch timer and page callbacks call
+-- these before their definitions appear below.
+local RenderAll, Reload, Dirty
+
 local SI = C_SpecializationInfo
 
 -- Forever's dual spec (Camelot ClassTalentsFrame): talent groups 1/2 are
@@ -60,16 +64,21 @@ local function ActiveSpecGroup()
     return 1
 end
 
+-- No API reports the unlock level (Forever's TALENT_SPEC_LOCKED is just
+-- "Locked"); group 2 unlocks at 40 per the user's Forever client.
+local DUAL_SPEC_LEVEL = 40
+
+local GROUP_NAMES = { "Primary", "Secondary" }
+local function GroupName(g)
+    return GROUP_NAMES[g] or ("Spec " .. g)
+end
+
 local function SpecGroupUnlocked(g)
     if g == 1 then return true end
     if not GetNumSpecGroups then return false end
     local ok, n = pcall(GetNumSpecGroups)
     return ok and type(n) == "number" and n >= g
 end
-
--- No API reports the unlock level (Forever's TALENT_SPEC_LOCKED is just
--- "Locked"); group 2 unlocks at 40 per the user's Forever client.
-local DUAL_SPEC_LEVEL = 40
 
 local function LockedText()
     local lvl = UnitLevel("player") or 0
@@ -326,7 +335,7 @@ function ns:TalentsEnsureData()
         if view and not SpecGroupUnlocked(view) then
             data.err = LockedText()
         elseif view then
-            data.err = ("Spec %d hasn't been activated yet"):format(view)
+            data.err = GroupName(view) .. " hasn't been activated yet"
         else
             data.err = "no trait config"
         end
@@ -576,7 +585,7 @@ local function ConditionLines(n, out)
             infos[i] = ci
             if ci.isSufficient and ci.isMet then metTypes[ci.type] = true end
             if ci.isGate and (not bestGate or (ci.spentAmountRequired or 0)
-                > (infos[bestGate].spentAmountRequired or 0)) then
+                    > (infos[bestGate].spentAmountRequired or 0)) then
                 bestGate = i
             end
             if ci.type == RANKS_ALLOWED and ci.playerLevel and not ci.isMet
@@ -621,7 +630,9 @@ local ShowTip
 -- for its data before building one, otherwise the description is missing.
 local function RetipOnSpellLoad(n, b)
     if not (n.spellID and C_Spell and C_Spell.IsSpellDataCached
-        and Spell and Spell.CreateFromSpellID) then return end
+            and Spell and Spell.CreateFromSpellID) then
+        return
+    end
     if C_Spell.IsSpellDataCached(n.spellID) then return end
     local sp = Spell:CreateFromSpellID(n.spellID)
     pcall(sp.ContinueOnSpellLoad, sp, function()
@@ -758,15 +769,33 @@ local SPEC_ALIAS = { combat = "outlaw", feralcombat = "feral" }
 -- Paladin's three are proven (/njrn diag); the rest are classic
 -- SkillLine IDs, unverified in-game.
 local SKILL_SPEC = {
-    [26] = "arms", [256] = "fury", [257] = "protection",
-    [594] = "holy", [267] = "protection", [184] = "retribution",
-    [50] = "beastmastery", [163] = "marksmanship", [51] = "survival",
-    [253] = "assassination", [38] = "outlaw", [39] = "subtlety",
-    [613] = "discipline", [56] = "holy", [78] = "shadow",
-    [375] = "elemental", [373] = "enhancement", [374] = "restoration",
-    [237] = "arcane", [8] = "fire", [6] = "frost",
-    [355] = "affliction", [354] = "demonology", [593] = "destruction",
-    [574] = "balance", [134] = "feral", [573] = "restoration",
+    [26] = "arms",
+    [256] = "fury",
+    [257] = "protection",
+    [594] = "holy",
+    [267] = "protection",
+    [184] = "retribution",
+    [50] = "beastmastery",
+    [163] = "marksmanship",
+    [51] = "survival",
+    [253] = "assassination",
+    [38] = "outlaw",
+    [39] = "subtlety",
+    [613] = "discipline",
+    [56] = "holy",
+    [78] = "shadow",
+    [375] = "elemental",
+    [373] = "enhancement",
+    [374] = "restoration",
+    [237] = "arcane",
+    [8] = "fire",
+    [6] = "frost",
+    [355] = "affliction",
+    [354] = "demonology",
+    [593] = "destruction",
+    [574] = "balance",
+    [134] = "feral",
+    [573] = "restoration",
 }
 
 local function ColArtAtlas(sec, i, n)
@@ -847,7 +876,7 @@ local function UpdateSpecBar(ui)
         local off = {}
         for g, b in ipairs(ui.tabRow.tabs) do
             local open = SpecGroupUnlocked(g)
-            b.label:SetText("Spec " .. g .. (g == active and " (active)"
+            b.label:SetText(GroupName(g) .. (g == active and " (active)"
                 or not open and (" (level %d)"):format(DUAL_SPEC_LEVEL)
                 or ""))
             off[g] = open and T.colors.text or T.colors.textDim
@@ -859,16 +888,49 @@ local function UpdateSpecBar(ui)
         and ("      " .. ns.PadGlyph("PAD3", "X") .. "  Activate") or ""))
 end
 
+-- Try each known group-switch API in turn and report what happened, both
+-- in chat (immediate) and in /njrn diag (ns.talActDiag). The server owns
+-- the active group, so the page re-reads ActiveSpecGroup a beat later
+-- instead of trusting the call's return.
+local function SwitchSpecGroup(g)
+    local tries = {
+        { "SI.SetActiveSpecGroup",
+            SI and SI.SetActiveSpecGroup },
+        { "SetActiveTalentGroup", SetActiveTalentGroup },
+        { "C_ClassTalents.SwitchToSpecializationByIndex",
+            C_ClassTalents and C_ClassTalents.SwitchToSpecializationByIndex },
+    }
+    for _, t in ipairs(tries) do
+        local name, f = t[1], t[2]
+        if f then
+            local ok, err = pcall(f, g)
+            ns.talActDiag = ("%s(%d) ok=%s err=%s"):format(
+                name, g, tostring(ok), tostring(err))
+            C_Timer.After(0.4, function()
+                local active = ActiveSpecGroup()
+                ns.talActDiag = ns.talActDiag
+                    .. (" active=%s"):format(tostring(active))
+                if active ~= g then
+                    print(("Nocturne: %s (%s)"):format(
+                        GROUP_NAMES and GroupName(g) or "spec",
+                        ns.talActDiag))
+                end
+                Dirty()
+            end)
+            return
+        end
+    end
+    ns.talActDiag = "no group-switch API"
+    print("Nocturne: no spec-switch API on this client")
+end
+
 local function ActivateViewedSpec()
     local g = ns.talView
     if InCombatLockdown() or not CanActivate(g) then return end
-    local set = (SI and SI.SetActiveSpecGroup) or (C_ClassTalents
-        and C_ClassTalents.SwitchToSpecializationByIndex)
-    if not set then return end
-    ns:ShowConfirm("Schimbi specializarea?", "Activezi Spec " .. g .. ".",
-        "Schimba", function()
-            pcall(set, g)
-        end)
+    local name = GroupName(g)
+    ns:ShowConfirm("Schimbi specializarea?",
+        "Activezi " .. name .. ".", "Schimba",
+        function() SwitchSpecGroup(g) end)
 end
 
 function ns:TalentsPaint()
@@ -887,7 +949,7 @@ function ns:TalentsPaint()
     end
 end
 
-local function RenderAll(f, ui)
+RenderAll = function(f, ui)
     local secs = ns.talData and ns.talData.secs or EMPTY
     local N = #secs
     for _, b in pairs(ui.pool) do
@@ -1078,13 +1140,13 @@ local function Move(ui, dx, dy)
     ns:TalentsPaint()
 end
 
-local function Reload()
+Reload = function()
     ns.talentsDirty = nil
     ns.talData = nil
     ns:TalentsEnsureData()
 end
 
-local function Dirty()
+Dirty = function()
     ns.talentsDirty = true
     local f = ns.pageFrames and ns.pageFrames[5]
     if not (f and f:IsShown()) then return end
@@ -1122,7 +1184,7 @@ ns.RegisterPage(5, {
     key = "talents",
     title = "Talents",
     subPages = function()
-        return HasSpecTabs() and { "Spec 1", "Spec 2" } or nil
+        return HasSpecTabs() and { "Primary", "Secondary" } or nil
     end,
     ownSubBar = true,
     Build = function(f)
@@ -1149,7 +1211,7 @@ ns.RegisterPage(5, {
         -- Dual-spec tabs (Forever) across the top; column contents start
         -- below them (TOPPAD).
         if HasSpecTabs() then
-            ui.tabRow = ns.NewSubTabRow(f, { "Spec 1", "Spec 2" })
+            ui.tabRow = ns.NewSubTabRow(f, { "Primary", "Secondary" })
             ui.tabRow:SetPoint("TOP", f, "TOP", 0, -TABROW_Y)
         end
 

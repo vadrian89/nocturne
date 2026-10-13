@@ -232,9 +232,9 @@ function ns:DiagText()
         add(("  dualspec active=%s numGroups=%s cfg1=%s cfg2=%s set=%s"):format(
             tryf(si.GetActiveSpecGroup), tryf(GetNumSpecGroups),
             si.GetCombatConfigIDForSpecGroup
-                and tryv(si.GetCombatConfigIDForSpecGroup, 1) or "-",
+            and tryv(si.GetCombatConfigIDForSpecGroup, 1) or "-",
             si.GetCombatConfigIDForSpecGroup
-                and tryv(si.GetCombatConfigIDForSpecGroup, 2) or "-",
+            and tryv(si.GetCombatConfigIDForSpecGroup, 2) or "-",
             val(si.SetActiveSpecGroup ~= nil)))
     end
     if C_ClassTalents and C_ClassTalents.GetActiveConfigID then
@@ -417,6 +417,9 @@ function ns:DiagText()
             tostring(ns.talUI and ns.talUI.diag or "")))
         if ns.talUI and ns.talUI.tipDiag then
             add("  last tip: " .. ns.talUI.tipDiag)
+        end
+        if ns.talActDiag then
+            add("  last spec switch: " .. ns.talActDiag)
         end
     end
     return table.concat(L, "\n")
