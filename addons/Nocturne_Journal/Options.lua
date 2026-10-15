@@ -167,11 +167,18 @@ function ns:DiagText()
         return table.concat(out, ",")
     end
     local function fns(t, pat)
+        local pats = type(pat) == "table" and pat or { pat }
         local out = {}
         if type(t) == "table" then
             for k in pairs(t) do
-                if type(k) == "string" and k:lower():find(pat) then
-                    out[#out + 1] = k
+                if type(k) == "string" then
+                    local kl = k:lower()
+                    for _, p in ipairs(pats) do
+                        if kl:find(p) then
+                            out[#out + 1] = k
+                            break
+                        end
+                    end
                 end
             end
         end
@@ -188,6 +195,8 @@ function ns:DiagText()
         add("  traits: " .. fns(C_Traits, "currency"))
         add("  traits: " .. fns(C_Traits, "subtree"))
         add("  traits: " .. fns(C_Traits, "combat"))
+        add("  traits: " .. fns(C_Traits, { "refund", "rollback", "reset",
+            "purchase", "commit", "selection", "cost", "cond" }))
     end
     if type(C_ClassTalents) == "table" then
         add("  classT: " .. fns(C_ClassTalents, "combat"))
@@ -448,9 +457,11 @@ function ns:DiagText()
         for _, s in ipairs(ns.talData.secs) do
             secs[#secs + 1] = ("%s[%d]"):format(s.key or s.title, #s.nodes)
         end
-        add(("talents: err=%s nodes=%s secs=[%s] sel=%s %s"):format(
+        add(("talents: err=%s nodes=%s staged=%s pts=%s secs=[%s] sel=%s %s"):format(
             tostring(ns.talData.err),
             tostring(ns.talData.nodeCount),
+            tostring(ns.talData.staged),
+            tostring(ns.talData.points),
             table.concat(secs, ", "),
             tostring(ns.talUI and ns.talUI.sel and ns.talUI.sel.id),
             tostring(ns.talUI and ns.talUI.diag or "")))

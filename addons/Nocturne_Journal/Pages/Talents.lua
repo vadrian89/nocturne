@@ -101,6 +101,12 @@ local function CanActivate(g)
     return g ~= nil and g ~= ActiveSpecGroup() and SpecGroupUnlocked(g)
 end
 
+-- Purchases/refunds/resets only apply to the active spec's config; the
+-- inactive tab (Forever dual spec) is view-only.
+local function IsActiveView()
+    return not HasSpecTabs() or ns.talView == ActiveSpecGroup()
+end
+
 -- group: the dual-spec tab to read (Forever); nil = the active config.
 local function LoadConfig(group)
     if not (C_Traits and C_Traits.GetConfigInfo) then return end
@@ -342,6 +348,13 @@ function ns:TalentsEnsureData()
         return data
     end
     data.configID, data.treeID = cfg, tid
+    -- Staged-commit model: retail C_Traits buffers rank changes until
+    -- CommitConfig; Forever applies them immediately, in which case
+    -- IsReadyForCommit stays false and the Apply hint never shows.
+    if C_Traits.IsReadyForCommit then
+        local okr, rdy = pcall(C_Traits.IsReadyForCommit, cfg)
+        data.staged = okr and rdy == true
+    end
     if C_Traits.GetTreeCurrencyInfo then
         local okc, curs = pcall(C_Traits.GetTreeCurrencyInfo, cfg, tid, true)
         if okc and curs then
@@ -874,10 +887,35 @@ local function CanLearn(n)
         and ((ns.talData and ns.talData.points) or 0) > 0
 end
 
+local function SpentRanks(data)
+    local n = 0
+    for _, s in ipairs(data and data.secs or EMPTY) do
+        for _, nd in ipairs(s.nodes) do
+            n = n + (nd.rank or 0)
+        end
+    end
+    return n
+end
+
 local function UpdateLegend(ui)
     local extra = ""
-    if CanLearn(ui.sel) then
-        extra = extra .. "      " .. ns.PadGlyph("PAD1", "A") .. "  Learn"
+    if IsActiveView() then
+        if CanLearn(ui.sel) then
+            extra = extra .. "      " .. ns.PadGlyph("PAD1", "A")
+                .. "  Learn"
+        end
+        if ui.sel and (ui.sel.rank or 0) > 0 then
+            extra = extra .. "      " .. ns.PadGlyph("PAD2", "B")
+                .. "  Refund"
+        end
+        if SpentRanks(ns.talData) > 0 then
+            extra = extra .. "      " .. ns.PadGlyph("PAD4", "Y")
+                .. "  Reset"
+        end
+        if ns.talData and ns.talData.staged then
+            extra = extra .. "      " .. ns.PadGlyph("PAD3", "X")
+                .. "  Apply"
+        end
     end
     if CanActivate(ns.talView) then
         extra = extra .. "      " .. ns.PadGlyph("PAD3", "X")
@@ -919,9 +957,9 @@ local function SwitchSpecGroup(g)
     for _, t in ipairs(tries) do
         local name, f = t[1], t[2]
         if f then
-            local ok, err = pcall(f, g)
-            ns.talActDiag = ("%s(%d) ok=%s err=%s"):format(
-                name, g, tostring(ok), tostring(err))
+            local ok, ret = pcall(f, g)
+            ns.talActDiag = ("%s(%d) ok=%s ret=%s"):format(
+                name, g, tostring(ok), tostring(ret))
             C_Timer.After(0.4, function()
                 local active = ActiveSpecGroup()
                 ns.talActDiag = ns.talActDiag
@@ -944,8 +982,8 @@ local function ActivateViewedSpec()
     local g = ns.talView
     if InCombatLockdown() or not CanActivate(g) then return end
     local name = GroupName(g)
-    ns:ShowConfirm("Schimbi specializarea?",
-        "Activezi " .. name .. ".", "Schimba",
+    ns:ShowConfirm("Change specialization?",
+        "Activate the " .. name .. " spec.", "Activate",
         function() SwitchSpecGroup(g) end)
 end
 
@@ -955,15 +993,18 @@ local function SpendPoint()
     local ui = ns.talUI
     local n = ui and ui.sel
     local data = ns.talData
-    if not (n and data and data.configID and CanLearn(n)) then return end
+    if InCombatLockdown() or not IsActiveView()
+        or not (n and data and data.configID and CanLearn(n)) then
+        return
+    end
     if not (C_Traits and C_Traits.PurchaseRank) then
         ns.talActDiag = "no PurchaseRank API"
         print("Nocturne: PurchaseRank not available on this client")
         return
     end
-    local ok, err = pcall(C_Traits.PurchaseRank, data.configID, n.id)
-    ns.talActDiag = ("PurchaseRank(node %d) ok=%s err=%s"):format(n.id,
-        tostring(ok), tostring(err))
+    local ok, ret = pcall(C_Traits.PurchaseRank, data.configID, n.id)
+    ns.talActDiag = ("PurchaseRank(node %d) ok=%s ret=%s"):format(n.id,
+        tostring(ok), tostring(ret))
     C_Timer.After(0.4, function()
         Dirty()
         local m = ui.sel
@@ -972,6 +1013,84 @@ local function SpendPoint()
                 tostring(m and m.rank), tostring(
                     ns.talData and ns.talData.points))
     end)
+end
+
+-- B: refund one rank of the selected talent. Routed through OnCancel (B
+-- otherwise closes the journal): returns true only once a refund ran, so
+-- B still closes the page when there is nothing to refund. RefundRank is
+-- the confirmed API on both clients; RollbackConfig is deliberately not
+-- a fallback — it discards every staged change, not one rank.
+local function RefundPoint()
+    local ui = ns.talUI
+    local n = ui and ui.sel
+    local data = ns.talData
+    if InCombatLockdown() or not IsActiveView()
+        or not (n and data and data.configID)
+        or (n.rank or 0) <= 0 then
+        return
+    end
+    if not (C_Traits and C_Traits.RefundRank) then
+        ns.talActDiag = "no RefundRank API"
+        print("Nocturne: no talent-refund API on this client")
+        return true
+    end
+    local ok, ret = pcall(C_Traits.RefundRank, data.configID, n.id)
+    ns.talActDiag = ("RefundRank(node %d) ok=%s ret=%s"):format(n.id,
+        tostring(ok), tostring(ret))
+    C_Timer.After(0.4, function()
+        Dirty()
+        local m = ui.sel
+        ns.talActDiag = (ns.talActDiag or "")
+            .. (" rank=%s pts=%s"):format(
+                tostring(m and m.rank), tostring(
+                    ns.talData and ns.talData.points))
+    end)
+    return true
+end
+
+-- X (active tab): commit staged rank changes on clients that buffer them
+-- (retail model). No-op on Forever-style clients where IsReadyForCommit
+-- stays false and purchases apply instantly.
+local function CommitChanges()
+    local data = ns.talData
+    if InCombatLockdown() or not IsActiveView()
+        or not (data and data.configID and data.staged) then
+        return
+    end
+    if not (C_Traits and C_Traits.CommitConfig) then
+        ns.talActDiag = "no CommitConfig API"
+        print("Nocturne: no talent-commit API on this client")
+        return
+    end
+    local ok, ret = pcall(C_Traits.CommitConfig, data.configID)
+    ns.talActDiag = ("C_Traits.CommitConfig ok=%s ret=%s"):format(
+        tostring(ok), tostring(ret))
+    C_Timer.After(0.4, Dirty)
+end
+
+-- Y: refund every purchased rank in the viewed config at once.
+local function ResetSpecTalents()
+    local data = ns.talData
+    if InCombatLockdown() or not IsActiveView()
+        or not (data and data.configID) then
+        return
+    end
+    local spent = SpentRanks(data)
+    if spent == 0 then return end
+    ns:ShowConfirm("Reset talents?",
+        ("Refunds all %d spent points."):format(spent),
+        "Reset", function()
+            if not (C_Traits and C_Traits.ResetTree) then
+                ns.talActDiag = "no ResetTree API"
+                print("Nocturne: no tree-reset API on this client")
+                return
+            end
+            local ok, ret = pcall(C_Traits.ResetTree, data.configID,
+                data.treeID)
+            ns.talActDiag = ("C_Traits.ResetTree ok=%s ret=%s")
+                :format(tostring(ok), tostring(ret))
+            C_Timer.After(0.4, Dirty)
+        end)
 end
 
 function ns:TalentsPaint()
@@ -1307,11 +1426,21 @@ ns.RegisterPage(5, {
     end,
     OnPad = function(f, button)
         if button == "PAD3" then
-            ActivateViewedSpec()
+            -- X shares the button: Activate only exists on the inactive
+            -- spec tab; on the active tab it commits staged changes.
+            if IsActiveView() then
+                CommitChanges()
+            else
+                ActivateViewedSpec()
+            end
             return
         end
         if button == "PAD1" then
             SpendPoint()
+            return
+        end
+        if button == "PAD4" then
+            ResetSpecTalents()
             return
         end
         local d = DIR[button]
@@ -1319,6 +1448,11 @@ ns.RegisterPage(5, {
         if not (d and ui) then return end
         ui.dpadHold[button] = { t = 0, acc = 0 }
         Move(ui, d[1], d[2])
+    end,
+    -- B refunds the selected talent's rank when there is one; otherwise
+    -- the press falls through and closes the journal.
+    OnCancel = function()
+        return RefundPoint()
     end,
     OnPadUp = function(f, button)
         local ui = ns.talUI
