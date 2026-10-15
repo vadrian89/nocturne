@@ -869,6 +869,23 @@ local function ApplyColBg(col, sec, x0, x1, W, H, atlas, su0, su1, own)
     return "none"
 end
 
+local function CanLearn(n)
+    return n and n.avail and (n.rank or 0) < (n.maxRank or 1)
+        and ((ns.talData and ns.talData.points) or 0) > 0
+end
+
+local function UpdateLegend(ui)
+    local extra = ""
+    if CanLearn(ui.sel) then
+        extra = extra .. "      " .. ns.PadGlyph("PAD1", "A") .. "  Learn"
+    end
+    if CanActivate(ns.talView) then
+        extra = extra .. "      " .. ns.PadGlyph("PAD3", "X")
+            .. "  Activate"
+    end
+    ui.legend:SetText(ui.legendNav .. extra)
+end
+
 local function UpdateSpecBar(ui)
     local view = ns.talView
     if ui.tabRow then
@@ -884,8 +901,7 @@ local function UpdateSpecBar(ui)
         ns.LayoutSubTabRow(ui.tabRow)
         ns.PaintSubTabRow(ui.tabRow, view or active, off)
     end
-    ui.legend:SetText(ui.legendNav .. (CanActivate(view)
-        and ("      " .. ns.PadGlyph("PAD3", "X") .. "  Activate") or ""))
+    UpdateLegend(ui)
 end
 
 -- Try each known group-switch API in turn and report what happened, both
@@ -933,9 +949,35 @@ local function ActivateViewedSpec()
         function() SwitchSpecGroup(g) end)
 end
 
+-- A / click: buy the next rank of the selected talent; the PurchaseRank
+-- answer comes back via trait events.
+local function SpendPoint()
+    local ui = ns.talUI
+    local n = ui and ui.sel
+    local data = ns.talData
+    if not (n and data and data.configID and CanLearn(n)) then return end
+    if not (C_Traits and C_Traits.PurchaseRank) then
+        ns.talActDiag = "no PurchaseRank API"
+        print("Nocturne: PurchaseRank not available on this client")
+        return
+    end
+    local ok, err = pcall(C_Traits.PurchaseRank, data.configID, n.id)
+    ns.talActDiag = ("PurchaseRank(node %d) ok=%s err=%s"):format(n.id,
+        tostring(ok), tostring(err))
+    C_Timer.After(0.4, function()
+        Dirty()
+        local m = ui.sel
+        ns.talActDiag = (ns.talActDiag or "")
+            .. (" rank=%s pts=%s"):format(
+                tostring(m and m.rank), tostring(
+                    ns.talData and ns.talData.points))
+    end)
+end
+
 function ns:TalentsPaint()
     local ui = ns.talUI
     if not ui then return end
+    UpdateLegend(ui)
     for _, b in pairs(ui.pool) do
         if b:IsShown() then
             b.sel:SetShown(b.node == ui.sel)
@@ -1102,6 +1144,8 @@ RenderAll = function(f, ui)
             end
         end
     end
+    ui.points:SetText(ns.talData and ns.talData.points
+        and ("Talent points: " .. ns.talData.points) or "")
     local selID = ui.sel and ui.sel.id
     ui.sel = nil
     for _, n in ipairs(ui.navNodes) do
@@ -1217,6 +1261,15 @@ ns.RegisterPage(5, {
 
         -- Parented to the canvas so it draws above the spec frames.
         ui.legend = T.CreateFontString(ui.canvas, 15, T.colors.text)
+        -- The point counter ends just left of the tab row's LT glyph;
+        -- without spec tabs it falls back to the bottom left.
+        ui.points = T.CreateFontString(ui.tabRow or ui.canvas, 22,
+            T.colors.accent)
+        if ui.tabRow then
+            ui.points:SetPoint("RIGHT", ui.tabRow.lt, "LEFT", -32, 0)
+        else
+            ui.points:SetPoint("BOTTOMLEFT", MARGIN, MARGIN)
+        end
         local up = ns.PadGlyph("PADDUP")
         local down = ns.PadGlyph("PADDDOWN")
         local dpad = (up and up:find("|") and down and down:find("|"))
@@ -1255,6 +1308,10 @@ ns.RegisterPage(5, {
     OnPad = function(f, button)
         if button == "PAD3" then
             ActivateViewedSpec()
+            return
+        end
+        if button == "PAD1" then
+            SpendPoint()
             return
         end
         local d = DIR[button]

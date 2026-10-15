@@ -371,6 +371,45 @@ function ns:DiagText()
                                                 or ni.edges or {}))))
                                 end
                             end
+                            -- Field names of trait conditions vary by
+                            -- client; dump a few so the emu gate rules can
+                            -- be verified against the real schema.
+                            if C_Traits.GetConditionInfo then
+                                local shown = 0
+                                for _, nid in ipairs(nodes) do
+                                    local ni = infos[nid]
+                                    if ni and ni.conditionIDs
+                                        and shown < 3 then
+                                        for _, cid in
+                                        ipairs(ni.conditionIDs) do
+                                            local ok9, ci = pcall(
+                                                C_Traits.GetConditionInfo,
+                                                cfg, cid)
+                                            if ok9 and type(ci)
+                                                == "table" then
+                                                local keys = {}
+                                                for k2, v2 in pairs(ci) do
+                                                    if type(v2)
+                                                        ~= "table" then
+                                                        keys[#keys + 1] =
+                                                            ("%s=%s")
+                                                            :format(
+                                                                tostring(k2),
+                                                                val(v2))
+                                                    end
+                                                end
+                                                table.sort(keys)
+                                                add(("  cond n%s c%s: %s")
+                                                    :format(val(nid),
+                                                        val(cid),
+                                                        table.concat(
+                                                            keys, " ")))
+                                                shown = shown + 1
+                                            end
+                                        end
+                                    end
+                                end
+                            end
                         end
                     end
                 end
