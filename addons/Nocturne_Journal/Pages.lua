@@ -51,14 +51,7 @@ local function ComingSoon(parent, text, color)
     return fs
 end
 
--- Page 1: Map
-ns.RegisterPage(1, {
-    key = "map",
-    title = "Map",
-    Build = function(f)
-        ComingSoon(f, "Map")
-    end,
-})
+-- Page 1 lives in Pages/Map.lua.
 
 -- Page 2 lives in Pages/Quests.lua.
 

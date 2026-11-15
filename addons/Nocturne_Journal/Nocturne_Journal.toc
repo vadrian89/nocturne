@@ -19,6 +19,7 @@ Widgets.lua
 Shell.lua
 Pages.lua
 QuestArchive.lua
+Pages\Map.lua
 Pages\Quests.lua
 Pages\Inventory.lua
 Pages\Abilities.lua

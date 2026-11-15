@@ -472,6 +472,86 @@ function ns:DiagText()
             add("  last spec switch: " .. ns.talActDiag)
         end
     end
+    -- Map artwork probe: Forever's GetMapArtLayers schema differs from
+    -- retail (layerWidth/layerHeight, no layerIndex/tileRows) and
+    -- GetMapArtLayerTextures answered empty for every index tried —
+    -- enumerate C_Map and exercise the candidate getters.
+    add("map api:")
+    local mid = C_Map and C_Map.GetBestMapForUnit
+        and select(2, pcall(C_Map.GetBestMapForUnit, "player"))
+    add(("  C_Map=%s mapID=%s"):format(type(C_Map), val(mid)))
+    add("  fns: " .. fns(C_Map, { "art", "layer", "explor", "tile",
+        "atlas", "area", "texture" }))
+    if C_Map and C_Map.GetMapArtLayers then
+        local okL, layers = pcall(C_Map.GetMapArtLayers, mid)
+        if okL and type(layers) == "table" and layers[1] then
+            local ks = {}
+            for k, v in pairs(layers[1]) do
+                ks[#ks + 1] = ("%s=%s"):format(tostring(k), val(v))
+            end
+            table.sort(ks)
+            add("  layer1: " .. table.concat(ks, " "))
+        else
+            add("  layers=" .. (okL and val(layers)
+                or "err:" .. tostring(layers):sub(1, 40)))
+        end
+    end
+    if C_Map and C_Map.GetMapArtLayerTextures then
+        for _, idx in ipairs({ 0, 1 }) do
+            add(("  tex(%d)=%s"):format(idx,
+                tryv(C_Map.GetMapArtLayerTextures, mid, idx)))
+        end
+        add("  tex()=" .. tryv(C_Map.GetMapArtLayerTextures, mid))
+    end
+    for _, fn in ipairs({ "GetMapArtBackgroundAtlas", "GetMapArtID",
+        "GetMapInfo" }) do
+        if C_Map and C_Map[fn] then
+            add(("  %s=%s"):format(fn, tryv(C_Map[fn], mid)))
+        end
+    end
+    if C_MapExplorationInfo
+        and C_MapExplorationInfo.GetExploredMapTextures then
+        add("  explored=" .. tryv(
+            C_MapExplorationInfo.GetExploredMapTextures, mid))
+    end
+    add(("  legacy: GetMapDetails=%s GetMapZones=%s GetNumMapLandmarks=%s")
+        :format(type(GetMapDetails), type(GetMapZones),
+            type(GetNumMapLandmarks)))
+    -- POI sources: area POIs (innkeepers, vendors) and flight nodes.
+    if C_AreaPoiInfo then
+        add("  areaPoi fns: " .. fns(C_AreaPoiInfo, { "poi", "map" }))
+        if C_AreaPoiInfo.GetAreaPOIForMap then
+            add("  areaPoiForMap=" .. tryv(
+                C_AreaPoiInfo.GetAreaPOIForMap, mid))
+        end
+    else
+        add("  C_AreaPoiInfo=" .. type(C_AreaPoiInfo))
+    end
+    if C_TaxiMap then
+        add("  taxi fns: " .. fns(C_TaxiMap, { "taxi", "node", "map" }))
+        if C_TaxiMap.GetTaxiNodesForMap then
+            add("  taxiNodes=" .. tryv(
+                C_TaxiMap.GetTaxiNodesForMap, mid))
+        end
+    else
+        add("  C_TaxiMap=" .. type(C_TaxiMap))
+    end
+    -- Minimap-style vendor/innkeeper tracking tables may expose POIs too.
+    for _, lib in ipairs({ "C_Minimap", "C_GamePad" }) do
+        local t = _G[lib]
+        if type(t) == "table" then
+            add("  " .. lib .. ": " .. fns(t, { "poi", "track", "pin" }))
+        end
+    end
+    if ns.mapDiag then
+        add("map: " .. ns.mapDiag)
+        local ui = ns.mapUI
+        if ui and ui.view then
+            add(("  view cx=%.3f cy=%.3f zoom=%.2f pos=%s"):format(
+                ui.view.cx, ui.view.cy, ui.view.zoom,
+                ui.px and ("%.3f,%.3f"):format(ui.px, ui.py) or "nil"))
+        end
+    end
     return table.concat(L, "\n")
 end
 

@@ -349,9 +349,14 @@ function ns:TalentsEnsureData()
     end
     data.configID, data.treeID = cfg, tid
     -- Staged-commit model: retail C_Traits buffers rank changes until
-    -- CommitConfig; Forever applies them immediately, in which case
-    -- IsReadyForCommit stays false and the Apply hint never shows.
-    if C_Traits.IsReadyForCommit then
+    -- CommitConfig. GetStagedChangesCost lists the pending changes —
+    -- a non-empty cost table is the real "Apply needed" signal.
+    -- (IsReadyForCommit answers true even with nothing staged on
+    -- Forever, so it is only a fallback.)
+    if C_Traits.GetStagedChangesCost then
+        local okr, cost = pcall(C_Traits.GetStagedChangesCost, cfg)
+        data.staged = okr and type(cost) == "table" and #cost > 0
+    elseif C_Traits.IsReadyForCommit then
         local okr, rdy = pcall(C_Traits.IsReadyForCommit, cfg)
         data.staged = okr and rdy == true
     end
