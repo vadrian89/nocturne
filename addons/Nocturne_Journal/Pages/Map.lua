@@ -26,6 +26,9 @@ local LIST_W = 280
 local PIN_SIZE = 38        -- every marker (quest, POI, taxi, transit)
 local PIN_SIZE_SUPER = 48  -- the super-tracked quest marker
 local QUEST_OVERDRAW = 1.3 -- quest disc art vs pin box (atlas padding)
+local GetPOITextureCoords = (C_Minimap and C_Minimap.GetPOITextureCoords)
+    or _G.GetPOITextureCoords
+local POI_TEXTURE = "Interface\\Minimap\\POIIcons"
 
 local function MapInfo(mapID)
     if not (C_Map and C_Map.GetMapInfo) then return end
@@ -201,6 +204,7 @@ local function CollectPOIs(mapID, data)
                             y = y,
                             name = info.name or "Point of interest",
                             atlas = info.atlasName or info.atlas,
+                            textureIndex = info.textureIndex,
                             loc = true,
                         }
                     end
@@ -623,6 +627,7 @@ local function EntriesFor(data)
             label = p.name,
             atlas = p.atlas,
             icon = p.icon,
+            textureIndex = p.textureIndex,
             round = p.round,
         }
     end
@@ -775,21 +780,37 @@ local function NewPin(ui, e)
         end
     else
         -- POIs/taxis/transit use their own atlas when the client provides
-        -- one, else a tracking-filter icon, the taxi icon, or a
-        -- theme-colored diamond.
-        local ok = false
+        -- one, else a tracking-filter icon, the legacy POIIcons cell
+        -- (area POIs with only a textureIndex, e.g. cities on the
+        -- continent map), the taxi icon, or a theme-colored diamond.
+        local ok, how = false, "diamond"
         if e.atlas then
             ok = C_Texture and C_Texture.GetAtlasInfo
                 and C_Texture.GetAtlasInfo(e.atlas) ~= nil
-            if ok then tex:SetAtlas(e.atlas, false) end
+            if ok then
+                tex:SetAtlas(e.atlas, false)
+                how = "atlas"
+            end
         end
         if not ok and e.icon then
             tex:SetTexture(e.icon)
             ok = tex:GetTextureFileID() ~= nil
+            if ok then how = "icon" end
+        end
+        if not ok and e.textureIndex and GetPOITextureCoords then
+            tex:SetTexture(POI_TEXTURE)
+            tex:SetTexCoord(GetPOITextureCoords(e.textureIndex))
+            ok, how = true, "texIdx"
         end
         if not ok and e.kind == "taxi" then
             tex:SetTexture("Interface\\TaxiFrame\\UI-Taxi-Icon-Green")
             ok = tex:GetTextureFileID() ~= nil
+            if ok then how = "taxi" end
+        end
+        local icn = ns.mapDiagIcons
+        if icn then
+            local ic = e.kind .. ":" .. how
+            icn[ic] = (icn[ic] or 0) + 1
         end
         if not ok then
             tex:SetTexture(nil)
