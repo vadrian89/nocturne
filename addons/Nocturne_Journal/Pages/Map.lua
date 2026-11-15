@@ -10,6 +10,7 @@ local PAN_TICK = 0.045   -- host fraction per D-pad repeat tick
 local STICK_SPEED = 0.55 -- host fraction per second at full deflection
 local ZOOM_STEP = 1.3
 local ZOOM_MIN, ZOOM_MAX = 1, 10
+local ZOOM_RATE = 12     -- ease speed toward the target zoom (1/s)
 local PLAYER_TICK = 0.15 -- seconds between player-marker refreshes
 
 local DIR = {
@@ -1112,6 +1113,17 @@ ns.RegisterPage(1, {
         -- so this ticker hangs off the map host instead.
         ui.tickT = 0
         ui.host:SetScript("OnUpdate", function(_, dt)
+            local v = ui.view
+            local zt = v and v.zt
+            if zt then
+                local r = zt / v.zoom
+                if math.abs(r - 1) < 0.002 then
+                    v.zoom, v.zt = zt, nil
+                else
+                    v.zoom = v.zoom * r ^ (1 - math.exp(-ZOOM_RATE * dt))
+                end
+                ApplyView(ui)
+            end
             ui.tickT = ui.tickT + dt
             if ui.tickT >= PLAYER_TICK then
                 ui.tickT = 0
@@ -1170,10 +1182,10 @@ ns.RegisterPage(1, {
     end,
     OnTrigger = function(f, dir)
         local ui = ns.mapUI
-        if not ui.view then return true end
-        ui.view.zoom = ui.view.zoom
-            * (dir > 0 and ZOOM_STEP or 1 / ZOOM_STEP)
-        ApplyView(ui)
+        local v = ui.view
+        if not v then return true end
+        local z = (v.zt or v.zoom) * (dir > 0 and ZOOM_STEP or 1 / ZOOM_STEP)
+        v.zt = math.min(ZOOM_MAX, math.max(ZOOM_MIN, z))
         return true
     end,
     OnPad = function(f, button)
@@ -1192,7 +1204,7 @@ ns.RegisterPage(1, {
             else
                 ui.view.cx, ui.view.cy = 0.5, 0.5
             end
-            ui.view.zoom = 1
+            ui.view.zt = 1
             ApplyView(ui)
         elseif button == "PAD4" then
             local p = ui.data and ui.data.parent
