@@ -12,12 +12,23 @@
         "utf8": "disable"
     },
     "Lua.workspace.library": [
-        "/home/vadrian/.devin/extensions/ketho.wow-api-0.22.3/Annotations/Core"
+        "~/.vscode-oss/extensions/ketho.wow-api-0.22.3/Annotations/Core"
     ],
     "Lua.diagnostics.globals": [
         "PowerBarColor",
         "InputUtil",
         "CopyTable",
-        "GetCVarBool"
+        "GetCVarBool",
+        "CORPSE",
+        "PET",
+        "CR_VERSATILITY_DAMAGE_DONE",
+        "TALENT_BUTTON_TOOLTIP_RANK_FORMAT",
+        "TALENT_BUTTON_TOOLTIP_NEXT_RANK",
+        "FEATURE_BECOMES_AVAILABLE_AT_LEVEL",
+        "TalentUtil",
+        "Spell",
+        "TooltipUtil",
+        "CANCEL",
+        "OKAY"
     ]
 }
