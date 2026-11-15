@@ -14,8 +14,7 @@ function ns:InitOptions()
     local accent = T.colors.accent
     s:Text(
         T.ColorText("Compass only", accent) .. " — the minimap stays hidden for good. The in-region " ..
-        "quest glow still follows the quest's real area, plus the selected quest's navigation " ..
-        "diamond arrival, else the Area radius (below) around the pin.\n" ..
+        "quest glow uses the Area radius (below) around the pin.\n" ..
         T.ColorText("Compass and minimap", accent) .. " — both are always shown.\n" ..
         T.ColorText("Smart", accent) .. " — the minimap shows itself within 150 yards of a tracked quest, " ..
         "world quest or event, within the Area radius of the selected quest's target and in " ..
@@ -183,6 +182,17 @@ SlashCmdList.NOCTURNECOMPASS = function(msg)
                     S(N.HasValidScreenPosition and N.HasValidScreenPosition()),
                     S(N.WasClampedToScreen and N.WasClampedToScreen()), S(nx), S(ny),
                     UIParent:GetWidth(), UIParent:GetHeight())
+        end
+        -- Which input lights the in-region glow for the super-tracked
+        -- quest (see TrackedQuests provider:IsInRegion).
+        local sq = ST.GetSuperTrackedQuestID and ST.GetSuperTrackedQuestID()
+        if sq and sq ~= 0 then
+            local blob = C_Minimap and C_Minimap.IsInsideQuestBlob
+                and C_Minimap.IsInsideQuestBlob(sq)
+            local dsq = C_QuestLog.GetDistanceSqToQuest(sq)
+            lines[#lines + 1] = ("region quest=%s blob=%s navArrived=%s pinDist=%s radius=%s"):format(
+                S(sq), S(blob), S(ns.NavArrived and ns.NavArrived()),
+                S(dsq and not ns.IsSecret(dsq) and math.sqrt(dsq)), S(ns.db.inRegionYards))
         end
         -- Position fix from quest pin distances (QuestFix.lua); outside
         -- instances compare fix= against rawMapPos= above.

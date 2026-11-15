@@ -42,6 +42,7 @@ local function MinimapShown()
     local f = ns.minimapFrame or _G.MinimapCluster
     return f and f:IsVisible() and f:GetAlpha() > 0 or false
 end
+ns.MinimapShown = MinimapShown
 
 -- In range + the pin distance² for sorting (huge when unknown).
 local function InRange(qid)
