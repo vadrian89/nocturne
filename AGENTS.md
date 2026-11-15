@@ -342,9 +342,12 @@ World coordinates (`C_Map.GetWorldPosFromMapPos`) and facing:
 
 ## Git
 
-- Branch `master`, conventional one-line commits + `Generated with Devin`
-  footer. Never commit secrets. Do not overwrite user edits in .toc files
-  (e.g. version fields) unless asked.
+- Branch `master`, conventional one-line commits. Never commit secrets.
+  Do not overwrite user edits in .toc files (e.g. version fields) unless
+  asked.
+- Commits carry no mention of AI use: no `Generated with ...` footer, no
+  `Co-Authored-By` trailer for an AI/bot, no tool or model names in the
+  message.
 - Never commit anything without explicit approval — leave changes in the
   working tree.
 
